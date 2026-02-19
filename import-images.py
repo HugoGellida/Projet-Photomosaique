@@ -2,6 +2,7 @@ import os
 import requests
 from tqdm import tqdm
 import time
+from PIL import Image
 
 '''
   ======== TUTORIEL ========
@@ -35,18 +36,60 @@ dans la variable globale API_KEY dans l'onglet CONFIGURATION
 #? Nous avons besoin de communiquer quelles données nous voulons et de spécifier chaque paramètres, afin d'avoir le même dataset!
 API_KEY = "wz57tsZ18vrNp421HZirfczUxgnk3pUH1KDuIMCNc3hb5TFon5uIOr76"    #! COLLEZ VOTRE CLE ICI
 QUERY = "nature"                                                        # Le thème d'images que vous voulez. Chaque images ont des tags, on met un tag ici pour filtrer notre recherche.
-PER_PAGE = 80                                                           # Maximum autorisé par Pexels. C'est le nombre d'images par pages que nous voulons prendre.
-MAX_PAGES = 10                                                          # Le nombre de pages que vous voulez. 
+PER_PAGE = 80                                                           # C'est le nombre d'images par pages que nous voulons prendre. Le maximum autorisé par Pexels est 80
+MAX_PAGES = 10                                                          # Le nombre de pages que vous voulez. Je ne connais pas le maximum
 SAVE_DIR = "pexels_images"                                              # Le repertoire dans lequel nous voulons mettre nos images. #! ATTENTION SI VOUS CHANGEZ LE NOM, SOYEZ SUR DE CHANGER LE NOM AUSSI DANS LE FICHIER .gitignore!!!
 # ===============================
 
 # ======== FUNCTIONS ========
-def download_image(url, filename):
+def download_image(url, filename): #* Permet le téléchargement d'une image
     response = requests.get(url, stream=True)
-    if response.status_code == 200: # Si on à l'autorisation
+    if response.status_code == 200:
         with open(filename, "wb") as f:
             for chunk in response.iter_content(1024):
                 f.write(chunk)
+
+def count_images(dirname): #* Compte le nombre d'images contenu dans le dataset
+    image_extension = ".jpg"
+    count = 0
+
+    for root, dirs, files in os.walk(dirname):
+        for file in files:
+            if file.lower().endswith(image_extension):
+                count += 1
+
+    return count
+
+def clear_dataset(dirname):
+    image_extension = ".jpg"
+    for root, dirs, files in os.walk(dirname):
+        for file in files:
+            if file.lower().endswith(image_extension):
+                file_path = os.path.join(root, file)
+                os.remove(file_path)
+    print("Dataset have been successfully cleaned")
+
+def resize(x=128, y=128):
+    """
+    Redimensionne toutes les images du dataset
+    """
+    image_extension = ".jpg"
+
+    for root, dirs, files in os.walk(SAVE_DIR):
+        for file in files:
+            if file.lower().endswith(image_extension):
+                file_path = os.path.join(root, file)
+
+                try:
+                    with Image.open(file_path) as img:
+                        img = img.resize((x, y))
+                        img.save(file_path)
+
+                except Exception as e:
+                    print(f"Error resizing {file}: {e}")
+
+    print(f"All images have been resized to {x}x{y}.")
+
                 
 # ===============================
 
@@ -85,3 +128,4 @@ for page in range(1, MAX_PAGES + 1):
     time.sleep(1)  # Ici, j'ai eu beaucoup de mal, mais l'API à un certaine limite à respecter. Donc je met un delai pour éviter qu'il nous crache dessus
 
 print("Download complete!")
+print("Number of images inside dataset: ", count_images(SAVE_DIR))
