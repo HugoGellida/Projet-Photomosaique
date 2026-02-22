@@ -70,26 +70,21 @@ def clear_dataset(dirname):
     print("Dataset have been successfully cleaned")
 
 def resize(x=128, y=128):
-    """
-    Redimensionne toutes les images du dataset
-    """
     image_extension = ".jpg"
 
     for root, dirs, files in os.walk(SAVE_DIR):
-        for file in files:
-            if file.lower().endswith(image_extension):
-                file_path = os.path.join(root, file)
+        jpg_files = [f for f in files if f.lower().endswith(image_extension)]
+        
+        for file in tqdm(jpg_files, desc="Resizing images"):
+            file_path = os.path.join(root, file)
+            try:
+                with Image.open(file_path) as img:
+                    img = img.resize((x, y))
+                    img.save(file_path)
+            except Exception as e:
+                print(f"Error resizing {file}: {e}")
 
-                try:
-                    with Image.open(file_path) as img:
-                        img = img.resize((x, y))
-                        img.save(file_path)
-
-                except Exception as e:
-                    print(f"Error resizing {file}: {e}")
-
-    print(f"All images have been resized to {x}x{y}.")
-
+    print(f"Resize complete!")
                 
 # ===============================
 
@@ -101,6 +96,7 @@ headers = {
 
 os.makedirs(SAVE_DIR, exist_ok=True) # On créer le repertoire s'il n'existe pas
 
+clear_dataset(SAVE_DIR) # Utilisé pour des tests. Quand nous voudrons créer le dataset, le supprimer
 
 for page in range(1, MAX_PAGES + 1):
     print(f"Fetching page {page}...")
@@ -128,4 +124,5 @@ for page in range(1, MAX_PAGES + 1):
     time.sleep(1)  # Ici, j'ai eu beaucoup de mal, mais l'API à un certaine limite à respecter. Donc je met un delai pour éviter qu'il nous crache dessus
 
 print("Download complete!")
-print("Number of images inside dataset: ", count_images(SAVE_DIR))
+
+resize(128, 128)
