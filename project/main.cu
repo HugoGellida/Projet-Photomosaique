@@ -242,14 +242,18 @@ int main(int argc, char **argv) {
     return 1;
   }
   // Chargement de l'image cible
-  char cImageIn[250] = argv[1];
+  char *cImageIn = argv[1];
   ImageBase *input = new ImageBase();
   input->load(cImageIn);
   int width = input->getWidth();
   int height = input->getHeight();
 
+  std::vector<unsigned char> inputChar;
+  unsigned char *inputData = input->getData();
+  inputChar.insert(inputChar.end(), inputData, inputData + width * height);
+
   // Preparation de la liste d'image de traitement
-  char folderPath[250] = argv[2];
+  char *folderPath = argv[2];
   std::vector<ImageBase *> images = std::vector<ImageBase *>();
   std::vector<unsigned char> imagesChar;
   int requested_width = 512;
@@ -291,12 +295,14 @@ int main(int argc, char **argv) {
     }
   }
 
+  std::cout << std::endl;
+
   int sideOfImage = 256;
   int sideOfSmallImagesInPixel = 64;
   std::vector<unsigned char> imgsMeans =
       getImagesMeans(imagesChar, width, height);
   std::vector<unsigned char> imInLocalMeans =
-      getImagesLocalMeans(imInChar, width, height, sideOfImage);
+      getImagesLocalMeans(inputChar, width, height, sideOfImage);
   std::vector<unsigned char> imgsLocalMeans =
       getImagesLocalMeans(imagesChar, width, height, sideOfSmallImagesInPixel);
   std::vector<int> order = orderImg(imInLocalMeans, imgsMeans);
