@@ -10,6 +10,14 @@
 #include <string>
 #include <vector>
 
+int sideOfImage = 64;  //nombre d'imagettes utilisés par ligne et colonne pour l'image finale
+int sideOfSmallImagesInPixel = 64; // taille de l'imagette pour l'image final
+
+// important à changer pour le programme
+int requested_width = 128;
+int requested_height = 128; //! Ce qui est dit: les images du dataset ont des
+                              //! tailles différentes. Ce ne sera pas le cas
+
 namespace fs = std::filesystem;
 
 __global__ void sumImages(unsigned char *d_in, unsigned int *d_out, int width,
@@ -99,11 +107,22 @@ __global__ void areaSums(unsigned char *d_in, unsigned int *d_out, int width,
   }
 }
 
-__global__ void division(unsigned int *d_in, unsigned char *d_out, int N,
-                         int divider) {
-  int x = blockIdx.x * blockDim.x + threadIdx.x;
-  if (x < N)
-    d_out[x] = d_in[x] / divider;
+__global__
+void division(unsigned int* d_in,
+              unsigned char* d_out,
+              int areaNbr,
+              int localSize)
+{
+    int img = blockIdx.y;
+
+    int area = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (area >= areaNbr)
+        return;
+
+    int index = img * areaNbr + area;
+
+    d_out[index] = d_in[index] / localSize;
 }
 
 std::vector<unsigned char>
@@ -120,8 +139,13 @@ getImagesLocalMeans(std::vector<unsigned char> imageChar, int width, int height,
   dim3 sumGridSize((width + bSize - 1) / bSize, (height + bSize - 1) / bSize,
                    imgNbr);
 
-  dim3 meanBlockSize(bSize * bSize);
-  dim3 meanGridSize(imgNbr * areaNbr);
+  int threadsPerBlock = 256;
+
+  dim3 meanBlockSize(threadsPerBlock);
+  dim3 meanGridSize(
+      (areaNbr + threadsPerBlock - 1) / threadsPerBlock,
+      imgNbr
+  );
 
   unsigned char *d_in;
   cudaMalloc((void **)&d_in, imgNbr * imgSize * sizeof(unsigned char));
@@ -133,12 +157,10 @@ getImagesLocalMeans(std::vector<unsigned char> imageChar, int width, int height,
   cudaMemcpy(d_in, imageChar.data(), imgNbr * imgSize * sizeof(unsigned char),
              cudaMemcpyHostToDevice);
 
-  areaSums<<<sumGridSize, sumBlockSize>>>(d_in, d_out_tot, width, height,
-                                          divider);
+  areaSums<<<sumGridSize, sumBlockSize>>>(d_in, d_out_tot, width, height, divider);
   cudaDeviceSynchronize();
 
-  division<<<meanGridSize, meanBlockSize>>>(d_out_tot, d_out_mean,
-                                            imgNbr * areaNbr, localSize);
+  division<<<meanGridSize, meanBlockSize>>>(d_out_tot ,d_out_mean, areaNbr, localSize);
   cudaDeviceSynchronize();
 
   std::vector<unsigned char> hostOut(imgNbr * areaNbr);
@@ -208,6 +230,7 @@ ImageBase composeImg(const std::vector<unsigned char> &imagesChar, int imgNbr,
     for (int offY = 0; offY < sideSize; offY++) {
       for (int x = 0; x < smallImgSide; x++) {
         for (int y = 0; y < smallImgSide; y++) {
+          if (offX * sideSize + offY > composition.size()) std::cout << "pas normal normal" << std::endl;
           imOut[x + (offX * smallImgSide)][y + (offY * smallImgSide)] =
               imagesChar[composition[offX * sideSize + offY] * smallImgSize +
                          x * smallImgSide + y];
@@ -220,18 +243,29 @@ ImageBase composeImg(const std::vector<unsigned char> &imagesChar, int imgNbr,
 std::vector<int> orderImg(const std::vector<unsigned char> &imIn,
                           const std::vector<unsigned char> &imMeans) {
   std::vector<int> outValues = std::vector<int>();
+  std::vector<bool> used = std::vector(imMeans.size(), false);
   for (int i = 0; i < imIn.size(); i++) {
-    int bestIndex = 0;
-    for (int j = 1; j < imMeans.size(); j++) {
-      if ((imIn[i] - imMeans[j]) * (imIn[i] - imMeans[j]) <
-          (imIn[i] - imMeans[bestIndex]) * (imIn[i] - imMeans[bestIndex])) {
+    int bestIndex = -1;
+    int bestDist = INT_MAX;
+    for (int j = 0; j < imMeans.size(); j++) {
+      if (used[j]) continue;
+      int dist = (imIn[i] - imMeans[j]) * (imIn[i] - imMeans[j]);
+
+
+      if (dist < bestDist) {
         bestIndex = j;
+        bestDist = dist;
       }
     }
+    if (bestIndex == -1) {
+            std::cerr << "Plus d'images disponibles !" << std::endl;
+            break;
+    }
+    used[bestIndex] = true;
     outValues.push_back(bestIndex);
   }
   return outValues;
-}
+} // faire cuda, et utilisation d'une seule image
 
 //* ======== MAIN ========
 
@@ -256,9 +290,7 @@ int main(int argc, char **argv) {
   char *folderPath = argv[2];
   std::vector<ImageBase *> images = std::vector<ImageBase *>();
   std::vector<unsigned char> imagesChar;
-  int requested_width = 512;
-  int requested_height = 512; //! Ce qui est dit: les images du dataset ont des
-                              //! tailles différentes. Ce ne sera pas le cas
+  
 
   float totalImages = 0.f;
   for (const auto &entry : fs::directory_iterator(folderPath)) {
@@ -297,15 +329,18 @@ int main(int argc, char **argv) {
 
   std::cout << std::endl;
 
-  int sideOfImage = 256;
-  int sideOfSmallImagesInPixel = 64;
   std::vector<unsigned char> imgsMeans =
-      getImagesMeans(imagesChar, width, height);
+      getImagesMeans(imagesChar, requested_width, requested_height);
+
   std::vector<unsigned char> imInLocalMeans =
-      getImagesLocalMeans(inputChar, width, height, sideOfImage);
+      getImagesLocalMeans(inputChar, width, height, sideOfImage); // les moyennes de toutes les parties de l'image d'entrée
+
   std::vector<unsigned char> imgsLocalMeans =
-      getImagesLocalMeans(imagesChar, width, height, sideOfSmallImagesInPixel);
+      getImagesLocalMeans(imagesChar, requested_width, requested_height, sideOfSmallImagesInPixel); // les images resize a la suite
+
+      
   std::vector<int> order = orderImg(imInLocalMeans, imgsMeans);
+
   // ImageBase imOut = ImageBase(width, height, false);
   // for(int x = 0; x < width; x ++){
   //     for(int y = 0; y < height; y++){
@@ -316,7 +351,6 @@ int main(int argc, char **argv) {
   //     }
   // }
   ImageBase imOut = composeImg(imgsLocalMeans, images.size(), order);
-
   char cImageOut[250] = "out.pgm";
   imOut.save(cImageOut);
   return 0;
