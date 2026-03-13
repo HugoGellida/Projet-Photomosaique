@@ -1,3 +1,4 @@
+# ======== IMPORT ========
 import os
 import requests
 from tqdm import tqdm
@@ -35,11 +36,13 @@ dans la variable globale API_KEY dans l'onglet CONFIGURATION
 # ======== CONFIGURATION ========
 #? Nous avons besoin de communiquer quelles données nous voulons et de spécifier chaque paramètres, afin d'avoir le même dataset!
 API_KEY = "wz57tsZ18vrNp421HZirfczUxgnk3pUH1KDuIMCNc3hb5TFon5uIOr76"    #! COLLEZ VOTRE CLE ICI
-QUERY = "nature"                                                        # Le thème d'images que vous voulez. Chaque images ont des tags, on met un tag ici pour filtrer notre recherche.
+QUERY = "buildings"                                                        # Le thème d'images que vous voulez. Chaque images ont des tags, on met un tag ici pour filtrer notre recherche.
 PER_PAGE = 80                                                           # C'est le nombre d'images par pages que nous voulons prendre. Le maximum autorisé par Pexels est 80
 MAX_PAGES = 10                                                          # Le nombre de pages que vous voulez. Je ne connais pas le maximum
-SAVE_DIR = "pexels_images"                                              # Le repertoire dans lequel nous voulons mettre nos images. #! ATTENTION SI VOUS CHANGEZ LE NOM, SOYEZ SUR DE CHANGER LE NOM AUSSI DANS LE FICHIER .gitignore!!!
+SAVE_DIR = "./temp"                                              # Le repertoire dans lequel nous voulons mettre nos images. #! ATTENTION SI VOUS CHANGEZ LE NOM, SOYEZ SUR DE CHANGER LE NOM AUSSI DANS LE FICHIER .gitignore!!!
+OUTPUT_DIR = "./project/Images"
 # ===============================
+
 
 # ======== FUNCTIONS ========
 def download_image(url, filename): #* Permet le téléchargement d'une image
@@ -67,7 +70,6 @@ def clear_dataset(dirname):
             if file.lower().endswith(image_extension):
                 file_path = os.path.join(root, file)
                 os.remove(file_path)
-    print("Dataset have been successfully cleaned")
 
 def resize(x=128, y=128):
     image_extension = ".jpg"
@@ -84,19 +86,47 @@ def resize(x=128, y=128):
             except Exception as e:
                 print(f"Error resizing {file}: {e}")
 
-    print(f"Resize complete!")
-                
+    
+
+def convert(input_folder, output_folder):
+    for filename in os.listdir(input_folder):
+        if filename.lower().endswith(".jpg"):
+            input_path = os.path.join(input_folder, filename)
+            
+            # Open image
+            img = Image.open(input_path)
+            
+            # Convert to grayscale (PGM requires grayscale)
+            img_gray = img.convert("L")
+            
+            # Change extension to .pgm
+            output_filename = os.path.splitext(filename)[0] + ".pgm"
+            output_path = os.path.join(output_folder, output_filename)
+            
+            # Save as PGM
+            img_gray.save(output_path)
+
+            print(f"Converted: {filename} -> {output_filename}")
+
 # ===============================
 
+
+
+# ======================
 # ======== MAIN ========
+# ======================
 
 headers = {
     "Authorization": API_KEY
 }
 
-os.makedirs(SAVE_DIR, exist_ok=True) # On créer le repertoire s'il n'existe pas
+os.makedirs(SAVE_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-clear_dataset(SAVE_DIR) # Utilisé pour des tests. Quand nous voudrons créer le dataset, le supprimer
+print("========== STEP: CLEARING DATASET ==========")
+clear_dataset(SAVE_DIR)
+print("DATASET CLEARED")
+print("========== STEP: FETCHING DATA FROM PEXELS ==========")
 
 for page in range(1, MAX_PAGES + 1):
     print(f"Fetching page {page}...")
@@ -123,6 +153,10 @@ for page in range(1, MAX_PAGES + 1):
 
     time.sleep(1)  # Ici, j'ai eu beaucoup de mal, mais l'API à un certaine limite à respecter. Donc je met un delai pour éviter qu'il nous crache dessus
 
-print("Download complete!")
-
-resize(128, 128)
+print("FETCHING COMPLETE")
+print("========== STEP: RESIZING DATA TO DEFAULT: 512x512 ==========")
+resize(512, 512)
+print("DATASET READY FOR CONVERSION")
+print("========== STEP: CONVERSION FROM JPG TO PGM")
+convert(SAVE_DIR, OUTPUT_DIR)
+print("DATASET READY FOR USE")
