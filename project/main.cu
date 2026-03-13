@@ -237,7 +237,23 @@ ImageBase composeImg(const std::vector<unsigned char> &imagesChar, int imgNbr,
   return imOut;
 }
 
-std::vector<int> orderImg(const std::vector<unsigned char> &imIn,
+// ON PEUT UTILISER PLUSIEURS FOIS LA MEME IMAGETTE
+std::vector<int> orderImg(const std::vector<unsigned char> &imIn, const std::vector<unsigned char> &imMeans){
+    std::vector<int> outValues = std::vector<int>();
+    for(int i = 0; i < imIn.size(); i ++){
+        int bestIndex = 0;
+        for(int j = 1; j < imMeans.size(); j ++){
+            if((imIn[i]-imMeans[j]) * (imIn[i]-imMeans[j]) <  (imIn[i]-imMeans[bestIndex])*(imIn[i]-imMeans[bestIndex])){
+                bestIndex = j;
+            }
+        }
+        outValues.push_back(bestIndex);
+    }
+    return outValues;
+}
+
+// IMAGETTE UTILISEES UNIQUEMENT UNE SEULE FOIS
+std::vector<int> orderImgUnique(const std::vector<unsigned char> &imIn,
                           const std::vector<unsigned char> &imMeans) {
   std::vector<int> outValues = std::vector<int>();
   std::vector<bool> used = std::vector(imMeans.size(), false);
@@ -245,9 +261,9 @@ std::vector<int> orderImg(const std::vector<unsigned char> &imIn,
     int bestIndex = -1;
     int bestDist = INT_MAX;
     for (int j = 0; j < imMeans.size(); j++) {
-      if (used[j])
-        continue;
+      if (used[j]) continue;
       int dist = (imIn[i] - imMeans[j]) * (imIn[i] - imMeans[j]);
+
 
       if (dist < bestDist) {
         bestIndex = j;
@@ -255,14 +271,100 @@ std::vector<int> orderImg(const std::vector<unsigned char> &imIn,
       }
     }
     if (bestIndex == -1) {
-      std::cerr << "Plus d'images disponibles !" << std::endl;
-      break;
+            std::cerr << "Plus d'images disponibles !" << std::endl;
+            break;
     }
     used[bestIndex] = true;
     outValues.push_back(bestIndex);
   }
   return outValues;
-} // faire cuda, et utilisation d'une seule image
+}
+
+struct Zone {
+    int index;
+    int difficulty;
+};
+
+// IMAGETTE UTILISEES UNIQUEMENT UNE SEULE FOIS
+// AVEC MEILLEURE AFFECTATION
+std::vector<int> orderImgPriority(const std::vector<unsigned char> &imIn,
+                          const std::vector<unsigned char> &imMeans) {
+  std::vector<int> outValues = std::vector(imIn.size(), -1);
+  std::vector<bool> used = std::vector(imMeans.size(), false);
+  std::vector<Zone> zones(imIn.size());
+
+  
+  int seuil = 100;
+    for (int i = 0; i < imIn.size(); i++) {
+        zones[i].index = i;
+        int count = 0;
+        for (int j = 0; j < imMeans.size(); j++) {
+            int dist = (imIn[i] - imMeans[j]) * (imIn[i] - imMeans[j]);
+            if (dist < seuil) count++;
+        }
+        zones[i].difficulty = count;
+    }
+  std::sort(zones.begin(), zones.end(), [](const Zone &a, const Zone &b) {
+        return a.difficulty < b.difficulty;
+    });
+
+  
+
+  for (int k = 0; k < imIn.size(); k++) {
+        int currentZoneIdx = zones[k].index;
+        unsigned char targetColor = imIn[currentZoneIdx];
+        
+        int bestIndex = -1;
+        int bestDist = INT_MAX;
+
+        for (int j = 0; j < imMeans.size(); j++) {
+            if (used[j]) continue;
+            
+            int dist = (targetColor - imMeans[j]) * (targetColor - imMeans[j]);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIndex = j;
+            }
+        }
+
+        if (bestIndex != -1) {
+
+            used[bestIndex] = true;
+            outValues[currentZoneIdx] = bestIndex;
+        }
+    }
+
+    int N = outValues.size();
+    bool improved = true;
+
+    while (improved) {
+        improved = false;
+
+        for (int i = 0; i < N; i++) {
+            for (int j = i + 1; j < N; j++) {
+
+                int imgA = outValues[i];
+                int imgB = outValues[j];
+
+                int oldCost =
+                    (imIn[i] - imMeans[imgA]) * (imIn[i] - imMeans[imgA]) +
+                    (imIn[j] - imMeans[imgB]) * (imIn[j] - imMeans[imgB]);
+
+                int newCost =
+                    (imIn[i] - imMeans[imgB]) * (imIn[i] - imMeans[imgB]) +
+                    (imIn[j] - imMeans[imgA]) * (imIn[j] - imMeans[imgA]);
+
+                if (newCost < oldCost) {
+                    std::swap(outValues[i], outValues[j]);
+                    improved = true;
+                }
+            }
+        }
+    }
+
+    return outValues;
+}
+
 
 //* ======== MAIN ========
 
