@@ -267,7 +267,7 @@ std::vector<int> orderImg(const std::vector<unsigned char> &imIn,
 //* ======== MAIN ========
 
 int main(int argc, char **argv) {
-  // ./main <image> <dossier des images>
+  // ./main <image> <dossier du dataset>
   if (argc != 3) {
     std::cout << "Wrong use" << std::endl;
     return 1;
