@@ -1,4 +1,5 @@
 #include "ImageBase.h"
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -10,447 +11,454 @@
 #include <string>
 #include <vector>
 
-int sideOfImage =
-    64; // nombre d'imagettes utilisés par ligne et colonne pour l'image finale
-int sideOfSmallImagesInPixel = 64; // taille de l'imagette pour l'image final
+int sideOfImage = 16; // number of tiles per row/column for final image
+int smallTileSizeInPixels = 64; // size of each small image tile
 
-// important à changer pour le programme
-int requested_width = 128;
-int requested_height = 128; //! Ce qui est dit: les images du dataset ont des
-                            //! tailles différentes. Ce ne sera pas le cas
+int requested_width = 512;  // expected width of dataset images
+int requested_height = 512; // expected height of dataset images
 
 namespace fs = std::filesystem;
 
-__global__ void sumImages(unsigned char *d_in, unsigned int *d_out, int width,
-                          int height) {
-  __shared__ unsigned int sharedSum[16][16]; // shared with the rest of the
-                                             // block
+// CUDA kernel: sum all pixels of each image
+__global__ void sumImages(unsigned char *inputImages, unsigned int *imageSums,
+                          int width, int height) {
 
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
+  __shared__ unsigned int blockPixels[16][16]; // shared memory for block sum
 
-  int x = blockIdx.x * blockDim.x + tx;
-  int y = blockIdx.y * blockDim.y + ty;
-  int z = blockIdx.z;
+  int localX = threadIdx.x; // thread X inside block
+  int localY = threadIdx.y; // thread Y inside block
 
-  if (x < width && y < height) {
-    int imgSize = width * height;
-    int index = z * imgSize + y * width + x;
+  int pixelX = blockIdx.x * blockDim.x + localX; // global pixel X
+  int pixelY = blockIdx.y * blockDim.y + localY; // global pixel Y
+  int imageId = blockIdx.z;                      // index of the image
 
-    sharedSum[ty][tx] = d_in[index];
+  if (pixelX >= width || pixelY >= height)
+    return;
+
+  int imageSize = width * height;
+  int pixelIndex = imageId * imageSize + pixelY * width + pixelX;
+  blockPixels[localY][localX] = inputImages[pixelIndex];
+
+  __syncthreads();
+
+  // Horizontal reduction: sum each row in shared memory
+  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+    if (localX < stride) {
+      blockPixels[localY][localX] += blockPixels[localY][localX + stride];
+    }
     __syncthreads();
+  }
 
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-      if (tx < stride) {
-        sharedSum[ty][tx] += sharedSum[ty][tx + stride];
+  // Vertical reduction: sum across rows
+  if (localX == 0) {
+    for (int stride = blockDim.y / 2; stride > 0; stride /= 2) {
+      if (localY < stride) {
+        blockPixels[localY][0] += blockPixels[localY + stride][0];
       }
       __syncthreads();
     }
 
-    if (tx == 0) {
-      for (int stride = blockDim.y / 2; stride > 0; stride /= 2) {
-        if (ty < stride) {
-          sharedSum[ty][0] += sharedSum[ty + stride][0];
-        }
-        __syncthreads();
-      }
-
-      if (ty == 0) {
-        atomicAdd(&d_out[z], sharedSum[0][0]);
-      }
+    // Final sum for this block
+    if (localY == 0) {
+      atomicAdd(&imageSums[imageId], blockPixels[0][0]);
     }
   }
 }
 
-__global__ void areaSums(unsigned char *d_in, unsigned int *d_out, int width,
-                         int height, int divider) {
-  __shared__ unsigned int sharedSum[16][16];
+// CUDA kernel: sum pixels in areas for each image
+__global__ void areaSums(unsigned char *inputImages, unsigned int *areaSums,
+                         int width, int height, int divider) {
 
-  int tx = threadIdx.x;
-  int ty = threadIdx.y;
+  __shared__ unsigned int blockPixels[16][16];
 
-  int x = blockIdx.x * blockDim.x + tx;
-  int y = blockIdx.y * blockDim.y + ty;
-  int z = blockIdx.z;
-  if (x < width && y < height) {
+  int localX = threadIdx.x;
+  int localY = threadIdx.y;
 
-    int imgSize = width * height;
-    int index = z * imgSize + y * width + x;
+  int pixelX = blockIdx.x * blockDim.x + localX;
+  int pixelY = blockIdx.y * blockDim.y + localY;
+  int imageId = blockIdx.z;
 
-    sharedSum[ty][tx] = d_in[index];
+  if (pixelX < width && pixelY < height) {
+    int imageSize = width * height;
+    int pixelIndex = imageId * imageSize + pixelY * width + pixelX;
+    blockPixels[localY][localX] = inputImages[pixelIndex];
+
     __syncthreads();
 
     int areaWidth = width / divider;
     int areaHeight = height / divider;
-    int areaX = x / areaWidth;
-    int areaY = y / areaHeight;
+    int areaX = pixelX / areaWidth;
+    int areaY = pixelY / areaHeight;
 
     for (int stride = 1; stride < min(blockDim.x, areaWidth); stride *= 2) {
-      if (tx % (stride * 2) == 0) {
-        sharedSum[ty][tx] += sharedSum[ty][tx + stride];
+      if (localX % (stride * 2) == 0) {
+        blockPixels[localY][localX] += blockPixels[localY][localX + stride];
       }
       __syncthreads();
     }
 
-    if (tx % areaWidth == 0) {
+    if (localX % areaWidth == 0) {
       for (int stride = 1; stride < min(blockDim.y, areaHeight); stride *= 2) {
-        if (ty % (stride * 2) == 0) {
-          sharedSum[ty][tx] += sharedSum[ty + stride][tx];
+        if (localY % (stride * 2) == 0) {
+          blockPixels[localY][localX] += blockPixels[localY + stride][localX];
         }
         __syncthreads();
       }
 
-      if (ty % areaHeight == 0) {
-        atomicAdd(&d_out[divider * divider * z + areaY * divider + areaX],
-                  sharedSum[ty][tx]);
+      if (localY % areaHeight == 0) {
+        atomicAdd(
+            &areaSums[divider * divider * imageId + areaY * divider + areaX],
+            blockPixels[localY][localX]);
       }
     }
   }
 }
 
-__global__ void division(unsigned int *d_in, unsigned char *d_out, int areaNbr,
-                         int localSize) {
-  int img = blockIdx.y;
+// CUDA kernel: divide accumulated sums by number of pixels
+__global__ void divideAreas(unsigned int *areaSums, unsigned char *areaMeans,
+                            int numAreas, int pixelsPerArea) {
 
-  int area = blockIdx.x * blockDim.x + threadIdx.x;
+  int imageId = blockIdx.y;
+  int areaIndex = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (area >= areaNbr)
+  if (areaIndex >= numAreas)
     return;
 
-  int index = img * areaNbr + area;
-
-  d_out[index] = d_in[index] / localSize;
+  int index = imageId * numAreas + areaIndex;
+  areaMeans[index] = areaSums[index] / pixelsPerArea;
 }
 
+// Compute local means for image areas
 std::vector<unsigned char>
-getImagesLocalMeans(std::vector<unsigned char> imageChar, int width, int height,
+getImagesLocalMeans(std::vector<unsigned char> imageData, int width, int height,
                     int divider) {
-  size_t imgSize = width * height;
-  size_t localSize = (width / divider) * (height / divider);
-  size_t areaNbr = divider * divider;
 
-  int imgNbr = imageChar.size() / (width * height);
+  size_t imageSize = width * height;
+  size_t pixelsPerArea = (width / divider) * (height / divider);
+  size_t numAreas = divider * divider;
 
-  int bSize = 16;
-  dim3 sumBlockSize(bSize, bSize);
-  dim3 sumGridSize((width + bSize - 1) / bSize, (height + bSize - 1) / bSize,
-                   imgNbr);
+  int numImages = imageData.size() / imageSize;
+
+  int blockSize = 16;
+  dim3 blockDims(blockSize, blockSize);
+  dim3 gridDims((width + blockSize - 1) / blockSize,
+                (height + blockSize - 1) / blockSize, numImages);
 
   int threadsPerBlock = 256;
+  dim3 divBlock(threadsPerBlock);
+  dim3 divGrid((numAreas + threadsPerBlock - 1) / threadsPerBlock, numImages);
 
-  dim3 meanBlockSize(threadsPerBlock);
-  dim3 meanGridSize((areaNbr + threadsPerBlock - 1) / threadsPerBlock, imgNbr);
+  unsigned char *d_input;
+  cudaMalloc((void **)&d_input, numImages * imageSize * sizeof(unsigned char));
 
-  unsigned char *d_in;
-  cudaMalloc((void **)&d_in, imgNbr * imgSize * sizeof(unsigned char));
-  unsigned int *d_out_tot;
-  cudaMalloc((void **)&d_out_tot, imgNbr * areaNbr * sizeof(unsigned int));
-  unsigned char *d_out_mean;
-  cudaMalloc((void **)&d_out_mean, imgNbr * areaNbr * sizeof(unsigned char));
+  unsigned int *d_areaSums;
+  cudaMalloc((void **)&d_areaSums, numImages * numAreas * sizeof(unsigned int));
 
-  cudaMemcpy(d_in, imageChar.data(), imgNbr * imgSize * sizeof(unsigned char),
+  unsigned char *d_areaMeans;
+  cudaMalloc((void **)&d_areaMeans,
+             numImages * numAreas * sizeof(unsigned char));
+
+  cudaMemcpy(d_input, imageData.data(),
+             numImages * imageSize * sizeof(unsigned char),
              cudaMemcpyHostToDevice);
 
-  areaSums<<<sumGridSize, sumBlockSize>>>(d_in, d_out_tot, width, height,
-                                          divider);
+  areaSums<<<gridDims, blockDims>>>(d_input, d_areaSums, width, height,
+                                    divider);
   cudaDeviceSynchronize();
 
-  division<<<meanGridSize, meanBlockSize>>>(d_out_tot, d_out_mean, areaNbr,
-                                            localSize);
+  divideAreas<<<divGrid, divBlock>>>(d_areaSums, d_areaMeans, numAreas,
+                                     pixelsPerArea);
   cudaDeviceSynchronize();
 
-  std::vector<unsigned char> hostOut(imgNbr * areaNbr);
-  cudaMemcpy(hostOut.data(), d_out_mean,
-             imgNbr * areaNbr * sizeof(unsigned char), cudaMemcpyDeviceToHost);
-  std::vector<unsigned int> testData(imgNbr * areaNbr);
-  cudaMemcpy(testData.data(), d_out_tot,
-             imgNbr * areaNbr * sizeof(unsigned int), cudaMemcpyDeviceToHost);
-
-  cudaFree(d_in);
-  cudaFree(d_out_tot);
-  cudaFree(d_out_mean);
-  return hostOut;
-}
-
-std::vector<unsigned char> getImagesMeans(std::vector<unsigned char> imagesChar,
-                                          int width, int height) {
-  size_t imgNbr = imagesChar.size() / (width * height);
-  size_t imgSize = width * height;
-  size_t totalSize = imgSize * imgNbr;
-
-  int bSize = 16;
-  dim3 sumBlockSize(bSize, bSize);
-  dim3 sumGridSize((width + bSize - 1) / bSize, (height + bSize - 1) / bSize,
-                   imgNbr);
-
-  dim3 meanBlockSize(bSize * bSize);
-  dim3 meanGridSize((imgNbr + bSize * bSize - 1) / (bSize * bSize));
-
-  unsigned char *d_in;
-  cudaMalloc((void **)&d_in, totalSize * sizeof(unsigned char));
-  unsigned int *d_out_tot;
-  cudaMalloc((void **)&d_out_tot, imgNbr * sizeof(unsigned int));
-  unsigned char *d_out_mean;
-  cudaMalloc((void **)&d_out_mean, imgNbr * sizeof(unsigned char));
-
-  cudaMemcpy(d_in, imagesChar.data(), totalSize * sizeof(unsigned char),
-             cudaMemcpyHostToDevice);
-
-  sumImages<<<sumGridSize, sumBlockSize>>>(d_in, d_out_tot, width, height);
-  cudaDeviceSynchronize();
-
-  division<<<meanGridSize, meanBlockSize>>>(d_out_tot, d_out_mean, imgNbr,
-                                            width * height);
-  cudaDeviceSynchronize();
-
-  std::vector<unsigned char> hostOut(imgNbr);
-  cudaMemcpy(hostOut.data(), d_out_mean, imgNbr * sizeof(unsigned char),
+  std::vector<unsigned char> hostMeans(numImages * numAreas);
+  cudaMemcpy(hostMeans.data(), d_areaMeans,
+             numImages * numAreas * sizeof(unsigned char),
              cudaMemcpyDeviceToHost);
 
-  cudaFree(d_in);
-  cudaFree(d_out_tot);
-  cudaFree(d_out_mean);
-  return hostOut;
+  cudaFree(d_input);
+  cudaFree(d_areaSums);
+  cudaFree(d_areaMeans);
+
+  return hostMeans;
 }
 
-ImageBase composeImg(const std::vector<unsigned char> &imagesChar, int imgNbr,
-                     const std::vector<int> &composition) {
-  int smallImgSize = imagesChar.size() / imgNbr;
-  int smallImgSide = sqrt(smallImgSize);
-  int sideSize = sqrt(composition.size());
+// Compute mean intensity for entire images
+std::vector<unsigned char> getImagesMeans(std::vector<unsigned char> imagesData,
+                                          int width, int height) {
 
-  ImageBase imOut =
-      ImageBase(sideSize * smallImgSide, sideSize * smallImgSide, false);
+  size_t numImages = imagesData.size() / (width * height);
+  size_t imageSize = width * height;
 
-  for (int offX = 0; offX < sideSize; offX++)
-    for (int offY = 0; offY < sideSize; offY++) {
-      for (int x = 0; x < smallImgSide; x++) {
-        for (int y = 0; y < smallImgSide; y++) {
-          if (offX * sideSize + offY > composition.size())
-            std::cout << "pas normal normal" << std::endl;
-          imOut[x + (offX * smallImgSide)][y + (offY * smallImgSide)] =
-              imagesChar[composition[offX * sideSize + offY] * smallImgSize +
-                         x * smallImgSide + y];
-        }
-      }
-    }
-  return imOut;
+  int blockSize = 16;
+  dim3 blockDims(blockSize, blockSize);
+  dim3 gridDims((width + blockSize - 1) / blockSize,
+                (height + blockSize - 1) / blockSize, numImages);
+
+  dim3 divBlock(blockSize * blockSize);
+  dim3 divGrid((numImages + blockSize * blockSize - 1) /
+               (blockSize * blockSize));
+
+  unsigned char *d_input;
+  cudaMalloc((void **)&d_input, numImages * imageSize * sizeof(unsigned char));
+
+  unsigned int *d_imageSums;
+  cudaMalloc((void **)&d_imageSums, numImages * sizeof(unsigned int));
+
+  unsigned char *d_imageMeans;
+  cudaMalloc((void **)&d_imageMeans, numImages * sizeof(unsigned char));
+
+  cudaMemcpy(d_input, imagesData.data(),
+             numImages * imageSize * sizeof(unsigned char),
+             cudaMemcpyHostToDevice);
+
+  sumImages<<<gridDims, blockDims>>>(d_input, d_imageSums, width, height);
+  cudaDeviceSynchronize();
+
+  divideAreas<<<divGrid, divBlock>>>(d_imageSums, d_imageMeans, numImages,
+                                     width * height);
+  cudaDeviceSynchronize();
+
+  std::vector<unsigned char> hostMeans(numImages);
+  cudaMemcpy(hostMeans.data(), d_imageMeans, numImages * sizeof(unsigned char),
+             cudaMemcpyDeviceToHost);
+
+  cudaFree(d_input);
+  cudaFree(d_imageSums);
+  cudaFree(d_imageMeans);
+
+  return hostMeans;
 }
 
-// ON PEUT UTILISER PLUSIEURS FOIS LA MEME IMAGETTE
-std::vector<int> orderImg(const std::vector<unsigned char> &imIn, const std::vector<unsigned char> &imMeans){
-    std::vector<int> outValues = std::vector<int>();
-    for(int i = 0; i < imIn.size(); i ++){
-        int bestIndex = 0;
-        for(int j = 1; j < imMeans.size(); j ++){
-            if((imIn[i]-imMeans[j]) * (imIn[i]-imMeans[j]) <  (imIn[i]-imMeans[bestIndex])*(imIn[i]-imMeans[bestIndex])){
-                bestIndex = j;
-            }
-        }
-        outValues.push_back(bestIndex);
-    }
-    return outValues;
+// Compose final image from small images
+ImageBase composeImg(const std::vector<unsigned char> &smallImagesData,
+                     int numImages, const std::vector<int> &composition) {
+
+  int smallImageSize = smallImagesData.size() / numImages;
+  int smallImageSide = sqrt(smallImageSize);
+  int gridSide = sqrt(composition.size());
+
+  ImageBase output(gridSide * smallImageSide, gridSide * smallImageSide, false);
+
+  for (int tileX = 0; tileX < gridSide; tileX++)
+    for (int tileY = 0; tileY < gridSide; tileY++)
+      for (int x = 0; x < smallImageSide; x++)
+        for (int y = 0; y < smallImageSide; y++)
+          output[x + tileX * smallImageSide][y + tileY * smallImageSide] =
+              smallImagesData[composition[tileX * gridSide + tileY] *
+                                  smallImageSize +
+                              x * smallImageSide + y];
+
+  return output;
 }
 
-// IMAGETTE UTILISEES UNIQUEMENT UNE SEULE FOIS
-std::vector<int> orderImgUnique(const std::vector<unsigned char> &imIn,
-                          const std::vector<unsigned char> &imMeans) {
-  std::vector<int> outValues = std::vector<int>();
-  std::vector<bool> used = std::vector(imMeans.size(), false);
-  for (int i = 0; i < imIn.size(); i++) {
+// Select images allowing repeats
+std::vector<int> orderImg(const std::vector<unsigned char> &targetLocalMeans,
+                          const std::vector<unsigned char> &datasetMeans) {
+
+  std::vector<int> selectedIndices;
+  for (int i = 0; i < targetLocalMeans.size(); i++) {
+    int bestIndex = 0;
+    for (int j = 1; j < datasetMeans.size(); j++)
+      if ((targetLocalMeans[i] - datasetMeans[j]) *
+              (targetLocalMeans[i] - datasetMeans[j]) <
+          (targetLocalMeans[i] - datasetMeans[bestIndex]) *
+              (targetLocalMeans[i] - datasetMeans[bestIndex]))
+        bestIndex = j;
+
+    selectedIndices.push_back(bestIndex);
+  }
+
+  return selectedIndices;
+}
+
+// Select images without repeats
+std::vector<int>
+orderImgUnique(const std::vector<unsigned char> &targetLocalMeans,
+               const std::vector<unsigned char> &datasetMeans) {
+
+  std::vector<int> selectedIndices(targetLocalMeans.size(), -1);
+  std::vector<bool> used(datasetMeans.size(), false);
+
+  for (int i = 0; i < targetLocalMeans.size(); i++) {
     int bestIndex = -1;
     int bestDist = INT_MAX;
-    for (int j = 0; j < imMeans.size(); j++) {
-      if (used[j]) continue;
-      int dist = (imIn[i] - imMeans[j]) * (imIn[i] - imMeans[j]);
 
-
+    for (int j = 0; j < datasetMeans.size(); j++) {
+      if (used[j])
+        continue;
+      int dist = (targetLocalMeans[i] - datasetMeans[j]) *
+                 (targetLocalMeans[i] - datasetMeans[j]);
       if (dist < bestDist) {
-        bestIndex = j;
         bestDist = dist;
+        bestIndex = j;
       }
     }
-    if (bestIndex == -1) {
-            std::cerr << "Plus d'images disponibles !" << std::endl;
-            break;
+
+    if (bestIndex != -1) {
+      used[bestIndex] = true;
+      selectedIndices[i] = bestIndex;
     }
-    used[bestIndex] = true;
-    outValues.push_back(bestIndex);
   }
-  return outValues;
+
+  return selectedIndices;
 }
 
+// Struct for prioritizing difficult zones
 struct Zone {
-    int index;
-    int difficulty;
+  int index;
+  int difficulty;
 };
 
-// IMAGETTE UTILISEES UNIQUEMENT UNE SEULE FOIS
-// AVEC MEILLEURE AFFECTATION
-std::vector<int> orderImgPriority(const std::vector<unsigned char> &imIn,
-                          const std::vector<unsigned char> &imMeans) {
-  std::vector<int> outValues = std::vector(imIn.size(), -1);
-  std::vector<bool> used = std::vector(imMeans.size(), false);
-  std::vector<Zone> zones(imIn.size());
+// Select images without repeats with priority
+std::vector<int>
+orderImgPriority(const std::vector<unsigned char> &targetLocalMeans,
+                 const std::vector<unsigned char> &datasetMeans) {
 
-  
-  int seuil = 100;
-    for (int i = 0; i < imIn.size(); i++) {
-        zones[i].index = i;
-        int count = 0;
-        for (int j = 0; j < imMeans.size(); j++) {
-            int dist = (imIn[i] - imMeans[j]) * (imIn[i] - imMeans[j]);
-            if (dist < seuil) count++;
-        }
-        zones[i].difficulty = count;
-    }
+  std::vector<int> selectedIndices(targetLocalMeans.size(), -1);
+  std::vector<bool> used(datasetMeans.size(), false);
+  std::vector<Zone> zones(targetLocalMeans.size());
+
+  int threshold = 100;
+
+  // Compute difficulty for each zone
+  for (int i = 0; i < targetLocalMeans.size(); i++) {
+    zones[i].index = i;
+    int count = 0;
+    for (int j = 0; j < datasetMeans.size(); j++)
+      if ((targetLocalMeans[i] - datasetMeans[j]) *
+              (targetLocalMeans[i] - datasetMeans[j]) <
+          threshold)
+        count++;
+    zones[i].difficulty = count;
+  }
+
+  // Sort zones by difficulty ascending
   std::sort(zones.begin(), zones.end(), [](const Zone &a, const Zone &b) {
-        return a.difficulty < b.difficulty;
-    });
+    return a.difficulty < b.difficulty;
+  });
 
-  
+  // Assign images
+  for (int k = 0; k < targetLocalMeans.size(); k++) {
+    int zoneIdx = zones[k].index;
+    unsigned char target = targetLocalMeans[zoneIdx];
 
-  for (int k = 0; k < imIn.size(); k++) {
-        int currentZoneIdx = zones[k].index;
-        unsigned char targetColor = imIn[currentZoneIdx];
-        
-        int bestIndex = -1;
-        int bestDist = INT_MAX;
+    int bestIndex = -1;
+    int bestDist = INT_MAX;
 
-        for (int j = 0; j < imMeans.size(); j++) {
-            if (used[j]) continue;
-            
-            int dist = (targetColor - imMeans[j]) * (targetColor - imMeans[j]);
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestIndex = j;
-            }
-        }
-
-        if (bestIndex != -1) {
-
-            used[bestIndex] = true;
-            outValues[currentZoneIdx] = bestIndex;
-        }
+    for (int j = 0; j < datasetMeans.size(); j++) {
+      if (used[j])
+        continue;
+      int dist = (target - datasetMeans[j]) * (target - datasetMeans[j]);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIndex = j;
+      }
     }
 
-    int N = outValues.size();
-    bool improved = true;
-
-    while (improved) {
-        improved = false;
-
-        for (int i = 0; i < N; i++) {
-            for (int j = i + 1; j < N; j++) {
-
-                int imgA = outValues[i];
-                int imgB = outValues[j];
-
-                int oldCost =
-                    (imIn[i] - imMeans[imgA]) * (imIn[i] - imMeans[imgA]) +
-                    (imIn[j] - imMeans[imgB]) * (imIn[j] - imMeans[imgB]);
-
-                int newCost =
-                    (imIn[i] - imMeans[imgB]) * (imIn[i] - imMeans[imgB]) +
-                    (imIn[j] - imMeans[imgA]) * (imIn[j] - imMeans[imgA]);
-
-                if (newCost < oldCost) {
-                    std::swap(outValues[i], outValues[j]);
-                    improved = true;
-                }
-            }
-        }
+    if (bestIndex != -1) {
+      used[bestIndex] = true;
+      selectedIndices[zoneIdx] = bestIndex;
     }
+  }
 
-    return outValues;
+  // Optional improvement by swapping
+  bool improved = true;
+  int N = selectedIndices.size();
+  while (improved) {
+    improved = false;
+    for (int i = 0; i < N; i++) {
+      for (int j = i + 1; j < N; j++) {
+        int imgA = selectedIndices[i];
+        int imgB = selectedIndices[j];
+
+        int oldCost = (targetLocalMeans[i] - datasetMeans[imgA]) *
+                          (targetLocalMeans[i] - datasetMeans[imgA]) +
+                      (targetLocalMeans[j] - datasetMeans[imgB]) *
+                          (targetLocalMeans[j] - datasetMeans[imgB]);
+
+        int newCost = (targetLocalMeans[i] - datasetMeans[imgB]) *
+                          (targetLocalMeans[i] - datasetMeans[imgB]) +
+                      (targetLocalMeans[j] - datasetMeans[imgA]) *
+                          (targetLocalMeans[j] - datasetMeans[imgA]);
+
+        if (newCost < oldCost) {
+          std::swap(selectedIndices[i], selectedIndices[j]);
+          improved = true;
+        }
+      }
+    }
+  }
+
+  return selectedIndices;
 }
-
 
 //* ======== MAIN ========
 
 int main(int argc, char **argv) {
-  // ./main <image> <dossier du dataset>
   if (argc != 3) {
     std::cout << "Wrong use" << std::endl;
     return 1;
   }
-  // Chargement de l'image cible
-  char *cImageIn = argv[1];
-  ImageBase *input = new ImageBase();
-  input->load(cImageIn);
-  int width = input->getWidth();
-  int height = input->getHeight();
 
-  std::vector<unsigned char> inputChar;
-  unsigned char *inputData = input->getData();
-  inputChar.insert(inputChar.end(), inputData, inputData + width * height);
+  // Load target image
+  char *inputPath = argv[1];
+  ImageBase *inputImage = new ImageBase();
+  inputImage->load(inputPath);
 
-  // Preparation de la liste d'image de traitement
-  char *folderPath = argv[2];
-  std::vector<ImageBase *> images = std::vector<ImageBase *>();
-  std::vector<unsigned char> imagesChar;
+  int width = inputImage->getWidth();
+  int height = inputImage->getHeight();
+
+  std::vector<unsigned char> inputDataVec;
+  unsigned char *inputData = inputImage->getData();
+  inputDataVec.insert(inputDataVec.end(), inputData,
+                      inputData + width * height);
+
+  // Load dataset images
+  char *datasetFolder = argv[2];
+  std::vector<ImageBase *> datasetImages;
+  std::vector<unsigned char> datasetData;
 
   float totalImages = 0.f;
-  for (const auto &entry : fs::directory_iterator(folderPath)) {
-    if (entry.is_regular_file() && entry.path().extension() == ".pgm") {
+  for (const auto &entry : fs::directory_iterator(datasetFolder))
+    if (entry.is_regular_file() && entry.path().extension() == ".pgm")
       totalImages++;
-    }
-  }
 
-  // Extraction des images adaptées
   float current = 0.f;
-  for (const auto &entry : fs::directory_iterator(folderPath)) {
-    if (entry.is_regular_file()) {
+  for (const auto &entry : fs::directory_iterator(datasetFolder)) {
+    if (entry.is_regular_file() && entry.path().extension() == ".pgm") {
       std::string path = entry.path().string();
-      if (entry.path().extension() ==
-          ".pgm") { //! Attention: seuls les pgms sont autorisées, l'extraction
-                    //! retourne des fichiers jpg!
-
-        // Chargement de l'image du dataset
-        ImageBase *img = new ImageBase();
-        img->load(path.c_str());
-        int img_height = img->getHeight();
-        int img_width = img->getWidth();
-        if (img_height == requested_height && img_width == requested_width) {
-          images.push_back(img);
-          unsigned char *data = img->getData();
-          imagesChar.insert(imagesChar.end(), data,
-                            data + requested_width * requested_height);
-        }
-        current++;
-        float percent = (current * 100) / totalImages;
-        std::cout << "\rLoading images: " << percent << "% (" << current << "/"
-                  << totalImages << ")" << std::flush;
+      ImageBase *img = new ImageBase();
+      img->load(path.c_str());
+      if (img->getWidth() == requested_width &&
+          img->getHeight() == requested_height) {
+        datasetImages.push_back(img);
+        unsigned char *data = img->getData();
+        datasetData.insert(datasetData.end(), data,
+                           data + requested_width * requested_height);
       }
+      current++;
+      float percent = (current * 100) / totalImages;
+      std::cout << "\rLoading images: " << percent << "% (" << current << "/"
+                << totalImages << ")" << std::flush;
     }
   }
-
   std::cout << std::endl;
 
-  std::vector<unsigned char> imgsMeans =
-      getImagesMeans(imagesChar, requested_width, requested_height);
+  // Compute global and local means
+  std::vector<unsigned char> datasetMeans =
+      getImagesMeans(datasetData, requested_width, requested_height);
+  std::vector<unsigned char> targetLocalMeans =
+      getImagesLocalMeans(inputDataVec, width, height, sideOfImage);
+  std::vector<unsigned char> datasetLocalMeans = getImagesLocalMeans(
+      datasetData, requested_width, requested_height, smallTileSizeInPixels);
 
-  std::vector<unsigned char> imInLocalMeans = getImagesLocalMeans(
-      inputChar, width, height,
-      sideOfImage); // les moyennes de toutes les parties de l'image d'entrée
+  // Order images
+  std::vector<int> compositionOrder = orderImg(targetLocalMeans, datasetMeans);
 
-  std::vector<unsigned char> imgsLocalMeans = getImagesLocalMeans(
-      imagesChar, requested_width, requested_height,
-      sideOfSmallImagesInPixel); // les images resize a la suite
+  // Compose final image
+  ImageBase finalImage =
+      composeImg(datasetLocalMeans, datasetImages.size(), compositionOrder);
+  finalImage.save("./Results/out.pgm");
 
-  std::vector<int> order = orderImg(imInLocalMeans, imgsMeans);
-
-  // ImageBase imOut = ImageBase(width, height, false);
-  // for(int x = 0; x < width; x ++){
-  //     for(int y = 0; y < height; y++){
-  //         int meanX = x/(height/divider);
-  //         int meanY = y/(width/divider);
-  //         int mean = imInLocalMeans[meanX*divider+meanY];
-  //         imOut[x][y] = mean;
-  //     }
-  // }
-  ImageBase imOut = composeImg(imgsLocalMeans, images.size(), order);
-  char cImageOut[250] = "./Results/out.pgm";
-  imOut.save(cImageOut);
   return 0;
 }
