@@ -3,3 +3,5 @@ venv/
 project/Images/
 temp/
 pexels_architecture/
+project/Makefile
+.vscode/

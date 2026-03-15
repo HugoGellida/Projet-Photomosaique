@@ -89,7 +89,7 @@ def resize(x=128, y=128):
     
 
 def convert(input_folder, output_folder):
-    for filename in os.listdir(input_folder):
+    for filename in tqdm(os.listdir(input_folder), desc="Converting"):
         if filename.lower().endswith(".jpg"):
             input_path = os.path.join(input_folder, filename)
             
@@ -106,8 +106,6 @@ def convert(input_folder, output_folder):
             # Save as PGM
             img_gray.save(output_path)
 
-            print(f"Converted: {filename} -> {output_filename}")
-
 # ===============================
 
 
@@ -123,9 +121,9 @@ headers = {
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-print("========== STEP: CLEARING DATASET ==========")
+print("========== STEP: CLEARING TEMPORAR DATASET ==========")
 clear_dataset(SAVE_DIR)
-print("DATASET CLEARED")
+print("TEMPORAR JPG DATASET CLEARED")
 print("========== STEP: FETCHING DATA FROM PEXELS ==========")
 
 for page in range(1, MAX_PAGES + 1):
@@ -160,3 +158,6 @@ print("DATASET READY FOR CONVERSION")
 print("========== STEP: CONVERSION FROM JPG TO PGM")
 convert(SAVE_DIR, OUTPUT_DIR)
 print("DATASET READY FOR USE")
+print("========== STEP: CLEARING TEMPORAR DATASET ==========")
+clear_dataset(SAVE_DIR)
+print("TEMPORAR JPG DATASET CLEARED")
