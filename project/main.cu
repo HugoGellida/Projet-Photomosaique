@@ -281,6 +281,23 @@ float PSNRv2(ImageBase& imgIN, ImageBase& imgOUT) {
     }
 }
 
+int diffHisto(ImageBase& imgIN, ImageBase& imgOUT) {
+  int sideSize = imgIN.getHeight();
+  std::vector<int> histoIN = std::vector<int>(256,0);
+  std::vector<int> histoOUT = std::vector<int>(256,0);
+    for (int y = 0; y < sideSize; ++y) {
+        for (int x = 0; x < sideSize; ++x) {
+            histoIN[imgIN[y][x]] ++;
+            histoOUT[imgOUT[y][x]] ++;
+        }
+      }
+      int d = 0;
+    for (int i = 0; i < histoIN.size(); i++){
+      d += abs(histoIN[i] - histoOUT[i]); 
+    }
+    return d;   
+}
+
 
 
 ImageBase resizeImage(std::vector<unsigned char> image){
