@@ -12,7 +12,7 @@
 #include <vector>
 
 int sideOfImage = 16; // number of tiles per row/column for final image
-int smallTileSizeInPixels = 64; // size of each small image tile
+int smallTileSizeInPixels = 16; // size of each small image tile
 
 int requested_width = 512;  // expected width of dataset images
 int requested_height = 512; // expected height of dataset images
