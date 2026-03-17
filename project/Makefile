@@ -1,5 +1,5 @@
 # Compilateur CUDA
-NVCC = nvcc
+NVCC = nvcc -ccbin /usr/bin/gcc-10
 
 # Nom de l'exécutable
 TARGET = main
@@ -8,7 +8,7 @@ TARGET = main
 SRC = main.cu ImageBase.cpp
 
 # Options de compilation
-CFLAGS = -O2
+CFLAGS = -O2 -std=c++17
 HOSTFLAGS =  -Xcompiler -Wno-unused-result
 CUDAFLAGS = -arch=sm_60
 
@@ -16,7 +16,7 @@ CUDAFLAGS = -arch=sm_60
 all: $(TARGET)
 
 $(TARGET): $(SRC)
-	$(NVCC) $(CUDAFLAGS) $(CFLAGS) $(HOSTFLAGS) $(SRC) -o $(TARGET)
+	$(NVCC) $(CUDAFLAGS) $(CFLAGS) $(HOSTFLAGS) $(SRC) -o $(TARGET) -lstdc++ -lstdc++fs -lm
 
 # Nettoyage
 clean:
