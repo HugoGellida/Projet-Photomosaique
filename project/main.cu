@@ -11,11 +11,11 @@
 #include <string>
 #include <vector>
 
-int sideOfImage = 16; // number of tiles per row/column for final image
-int smallTileSizeInPixels = 16; // size of each small image tile
+int sideOfImage = 64; // number of tiles per row/column for final image
+int smallTileSizeInPixels = 64; // size of each small image tile
 
-int requested_width = 512;  // expected width of dataset images
-int requested_height = 512; // expected height of dataset images
+int requested_width = 128;  // expected width of dataset images
+int requested_height = 128; // expected height of dataset images
 
 namespace fs = std::filesystem;
 
@@ -228,6 +228,83 @@ std::vector<unsigned char> getImagesMeans(std::vector<unsigned char> imagesData,
 
   return hostMeans;
 }
+
+float PSNRv1(std::vector<unsigned char> targetLocalMeans, std::vector<unsigned char> datasetMeans, std::vector<int> compositionOrder) {
+    double EQM = 0.0;
+    int sideSize = sqrt(compositionOrder.size());
+  
+    for (int y = 0; y < sideSize; ++y) {
+        for (int x = 0; x < sideSize; ++x) {
+              int val_orig = targetLocalMeans[y*sideSize+x];
+              int val_rec  = datasetMeans[compositionOrder[y*sideSize+x]];
+              EQM += (val_orig - val_rec) * (val_orig - val_rec);
+        
+        }
+    }
+
+    EQM = EQM / (sideSize * sideSize);
+
+    if (EQM == 0) {
+        printf("PSNR = Infini (Images identiques)\n");
+        return 99.0;
+    } else {
+        double psnr = 10.0 * log10((255.0 * 255.0) / EQM);
+        printf("EQM = %f\n", EQM);
+        printf("PSNR = %f dB\n", psnr);
+        return (float)psnr;
+    }
+}
+
+float PSNRv2(ImageBase& imgIN, ImageBase& imgOUT) {
+    double EQM = 0.0;
+    int sideSize = imgIN.getHeight();
+  
+    for (int y = 0; y < sideSize; ++y) {
+        for (int x = 0; x < sideSize; ++x) {
+              int val_orig =  imgIN[y][x];
+              int val_rec  =  imgOUT[y][x];
+              EQM += (val_orig - val_rec) * (val_orig - val_rec);
+        
+        }
+    }
+
+    EQM = EQM / (sideSize * sideSize);
+
+    if (EQM == 0) {
+        printf("PSNR = Infini (Images identiques)\n");
+        return 99.0;
+    } else {
+        double psnr = 10.0 * log10((255.0 * 255.0) / EQM);
+        printf("EQM = %f\n", EQM);
+        printf("PSNR = %f dB\n", psnr);
+        return (float)psnr;
+    }
+}
+
+
+
+ImageBase resizeImage(std::vector<unsigned char> image){
+  int wantedSize = sideOfImage * sideOfImage * smallTileSizeInPixels * smallTileSizeInPixels;
+  int sizeImage = image.size();
+  int sideImage = sqrt(image.size());
+  int diff = sqrt(wantedSize) / sideImage;
+
+  ImageBase imageOUT(sqrt(wantedSize), sqrt(wantedSize), false);
+
+  for (int y = 0 ; y < sideImage; y ++){
+    for (int x = 0 ; x < sideImage; x++ ){
+      for (int yi = 0 ; yi < diff; yi++ ){
+        for (int xi = 0 ; xi < diff; xi++ ){
+          imageOUT[yi + diff*y ][xi + diff * x] = (int) image[y*sideImage+x];
+
+        }
+      }
+    }
+  }
+  return imageOUT;
+  
+}
+
 
 // Compose final image from small images
 ImageBase composeImg(const std::vector<unsigned char> &smallImagesData,
@@ -453,12 +530,18 @@ int main(int argc, char **argv) {
       datasetData, requested_width, requested_height, smallTileSizeInPixels);
 
   // Order images
-  std::vector<int> compositionOrder = orderImg(targetLocalMeans, datasetMeans);
+  std::vector<int> compositionOrder = orderImgPriority(targetLocalMeans, datasetMeans);
+
+  float psnr = PSNRv1(targetLocalMeans, datasetMeans, compositionOrder);
 
   // Compose final image
   ImageBase finalImage =
       composeImg(datasetLocalMeans, datasetImages.size(), compositionOrder);
-  finalImage.save("./Results/out.pgm");
+  finalImage.save("out.pgm");
+
+  ImageBase inputResize = resizeImage(inputDataVec);
+  psnr = PSNRv2(inputResize, finalImage );
+  inputResize.save("test.pgm");
 
   return 0;
 }
