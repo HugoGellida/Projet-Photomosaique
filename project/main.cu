@@ -11,11 +11,11 @@
 #include <string>
 #include <vector>
 
-int sideOfImage = 16; // number of tiles per row/column for final image
-int smallTileSizeInPixels = 16; // size of each small image tile
+int sideOfImage = 64; // number of tiles per row/column for final image
+int smallTileSizeInPixels = 64; // size of each small image tile
 
-int requested_width = 512;  // expected width of dataset images
-int requested_height = 512; // expected height of dataset images
+int requested_width = 128;  // expected width of dataset images
+int requested_height = 128; // expected height of dataset images
 
 namespace fs = std::filesystem;
 
@@ -453,7 +453,7 @@ int main(int argc, char **argv) {
       datasetData, requested_width, requested_height, smallTileSizeInPixels);
 
   // Order images
-  std::vector<int> compositionOrder = orderImg(targetLocalMeans, datasetMeans);
+  std::vector<int> compositionOrder = orderImgPriority(targetLocalMeans, datasetMeans);
 
   // Compose final image
   ImageBase finalImage =

@@ -36,11 +36,11 @@ dans la variable globale API_KEY dans l'onglet CONFIGURATION
 # ======== CONFIGURATION ========
 #? Nous avons besoin de communiquer quelles données nous voulons et de spécifier chaque paramètres, afin d'avoir le même dataset!
 API_KEY = "wz57tsZ18vrNp421HZirfczUxgnk3pUH1KDuIMCNc3hb5TFon5uIOr76"    #! COLLEZ VOTRE CLE ICI
-QUERY = "buildings"                                                        # Le thème d'images que vous voulez. Chaque images ont des tags, on met un tag ici pour filtrer notre recherche.
+QUERY = "nature"                                                        # Le thème d'images que vous voulez. Chaque images ont des tags, on met un tag ici pour filtrer notre recherche.
 PER_PAGE = 80                                                           # C'est le nombre d'images par pages que nous voulons prendre. Le maximum autorisé par Pexels est 80
-MAX_PAGES = 10                                                          # Le nombre de pages que vous voulez. Je ne connais pas le maximum
-SAVE_DIR = "./temp"                                              # Le repertoire dans lequel nous voulons mettre nos images. #! ATTENTION SI VOUS CHANGEZ LE NOM, SOYEZ SUR DE CHANGER LE NOM AUSSI DANS LE FICHIER .gitignore!!!
-OUTPUT_DIR = "./project/Images"
+MAX_PAGES = 30                                                          # Le nombre de pages que vous voulez. Je ne connais pas le maximum
+SAVE_DIR = "./temp"                                              # Le repertoire dans lequel nous voulons mettre nos images jpg. #! ATTENTION SI VOUS CHANGEZ LE NOM, SOYEZ SUR DE CHANGER LE NOM AUSSI DANS LE FICHIER .gitignore!!!
+OUTPUT_DIR = "./project/Images"                                  # Le repertoire dans lequel nous garderons le dataset
 # ===============================
 
 
@@ -155,7 +155,7 @@ print("FETCHING COMPLETE")
 print("========== STEP: RESIZING DATA TO DEFAULT: 512x512 ==========")
 resize(512, 512)
 print("DATASET READY FOR CONVERSION")
-print("========== STEP: CONVERSION FROM JPG TO PGM")
+print("========== STEP: CONVERSION FROM JPG TO PGM ==========")
 convert(SAVE_DIR, OUTPUT_DIR)
 print("DATASET READY FOR USE")
 print("========== STEP: CLEARING TEMPORAR DATASET ==========")
