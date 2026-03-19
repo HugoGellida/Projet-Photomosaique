@@ -1,7 +1,7 @@
 #include "ImageComposer.h"
 #include <cmath>
 
-ImageBase ImageComposer::compose(const std::vector<unsigned char> &tilesData, int numTiles, std::vector<int> &compositionOrder){
+ImageBase ImageComposer::compose(const std::vector<unsigned char> &tilesData, int numTiles, const std::vector<int> &compositionOrder){
     int tileSize = std::sqrt(tilesData.size() / numTiles);
     int gridSide = sqrt(compositionOrder.size());
 

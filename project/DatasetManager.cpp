@@ -11,7 +11,7 @@ void DatasetManager::loadFromFolder(const std::string &folderPath){
     for (const auto &entry : fs::directory_iterator(folderPath)){
         if (entry.is_regular_file() && entry.path().extension() == ".pgm") {
             ImageBase *img = new ImageBase();
-            img->load(entry.path().c_str());
+            img->load(entry.path().string().c_str());
             if (img->getWidth() == width && img->getHeight() == height) {
                 images.push_back(img);
             } else {
@@ -19,6 +19,7 @@ void DatasetManager::loadFromFolder(const std::string &folderPath){
             }
         }
     }
+    std::cout << "Loaded images: " << images.size() << std::endl;
 }
 
 const std::vector<ImageBase *> &DatasetManager::getImages() const {
