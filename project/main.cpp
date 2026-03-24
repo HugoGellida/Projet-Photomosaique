@@ -26,9 +26,9 @@ int main(int argc, char** argv) {
     auto datasetMeans = ImageProcessor::getGlobalMeans(datasetData, requestedSize, requestedSize);
     auto targetLocalMeans = ImageProcessor::getLocalMeans(
         {targetImage.getData(), targetImage.getData() + targetImage.getWidth() * targetImage.getHeight()},
-        targetImage.getWidth(), targetImage.getHeight(), imagettesSize);
+        targetImage.getWidth(), targetImage.getHeight(), imagesPerSide);
 
-    auto datasetLocalMeans = ImageProcessor::getLocalMeans(datasetData, requestedSize, requestedSize, imagesPerSide);
+    auto datasetLocalMeans = ImageProcessor::getLocalMeans(datasetData, requestedSize, requestedSize, imagettesSize);
 
     auto compositionOrder = ImageOrdering::orderAllowRepeats(targetLocalMeans, datasetMeans);
 
