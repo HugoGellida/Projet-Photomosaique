@@ -36,9 +36,12 @@ int main(int argc, char** argv) {
 
     ImageBase result = ImageComposer::compose(datasetLocalMeans, dataset.getImages().size(), compositionOrder);
 
-    ImageBase resizedOrigin = Utils::resizeImage(int image, imagesPerSide, imagettesSize);
+    ImageBase resizedOrigin = Utils::resizeImage({targetImage.getData(), targetImage.getData() + targetImage.getWidth() * targetImage.getHeight()}, imagesPerSide, imagettesSize);
 
+    float PSNR = ImageEvaluator::PSNR(resizedOrigin, result);
+    int diff = ImageEvaluator::diffHisto(resizedOrigin, result);
 
+    std::cout << PSNR << " " << diff << std::endl;
 
     result.save("./Results/out.pgm");
 

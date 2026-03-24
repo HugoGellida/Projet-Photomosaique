@@ -1,10 +1,11 @@
 #include "Utils.h"
+#include <cmath>
 
 ImageBase Utils::resizeImage(std::vector<unsigned char> image, int imagesPerSide, int imagettesSize){
   int wantedSize = imagesPerSide * imagesPerSide * imagettesSize * imagettesSize;
   int sizeImage = image.size();
-  int sideImage = sqrt(image.size());
-  int diff = sqrt(wantedSize) / sideImage;
+  int sideImage = std::sqrt(image.size());
+  int diff = std::sqrt(wantedSize) / sideImage;
 
   ImageBase imageOUT(sqrt(wantedSize), sqrt(wantedSize), false);
 

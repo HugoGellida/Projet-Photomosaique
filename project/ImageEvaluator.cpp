@@ -1,4 +1,5 @@
 #include "ImageEvaluator.h"
+#include <cmath>
 #include <vector>
 
 float ImageEvaluator::PSNR(ImageBase &origin, ImageBase &output) {
@@ -19,7 +20,7 @@ float ImageEvaluator::PSNR(ImageBase &origin, ImageBase &output) {
     printf("PSNR = Infini (Images identiques)\n");
     return 99.0;
   } else {
-    double psnr = 10.0 * log10((255.0 * 255.0) / EQM);
+    double psnr = 10.0 * std::log10((255.0 * 255.0) / EQM);
     printf("EQM = %f\n", EQM);
     printf("PSNR = %f dB\n", psnr);
     return (float)psnr;
@@ -33,13 +34,13 @@ int ImageEvaluator::diffHisto(ImageBase &origin,
   std::vector<int> histoOutput = std::vector<int>(256, 0);
   for (int y = 0; y < sideSize; ++y) {
     for (int x = 0; x < sideSize; ++x) {
-      histoInput[imgIN[y][x]]++;
-      histoOutput[imgOUT[y][x]]++;
+      histoInput[origin[y][x]]++;
+      histoOutput[output[y][x]]++;
     }
   }
   int d = 0;
-  for (int i = 0; i < histoIN.size(); i++) {
-    d += abs(histoIN[i] - histoOUT[i]);
+  for (int i = 0; i < histoInput.size(); i++) {
+    d += abs(histoInput[i] - histoOutput[i]);
   }
   return d;
 }
