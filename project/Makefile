@@ -5,7 +5,7 @@ NVCC = nvcc -ccbin /usr/bin/gcc-10
 TARGET = main
 
 # Fichiers sources
-SRC = main.cu ImageBase.cpp
+SRC = main.cpp ImageBase.cpp DatasetManager.cpp ImageProcessor.cu ImageOrdering.cpp ImageComposer.cpp ImageEvaluator.cpp Utils.cpp
 
 # Options de compilation
 CFLAGS = -O2 -std=c++17
