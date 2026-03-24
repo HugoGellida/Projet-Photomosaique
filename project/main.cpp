@@ -3,6 +3,8 @@
 #include "ImageProcessor.h"
 #include "ImageComposer.h"
 #include "ImageOrdering.h"
+#include "ImageEvaluator.h"
+#include "Utils.h"
 #include <iostream>
 
 int main(int argc, char** argv) {
@@ -32,8 +34,13 @@ int main(int argc, char** argv) {
 
     auto compositionOrder = ImageOrdering::orderAllowRepeats(targetLocalMeans, datasetMeans);
 
-    ImageBase finalImage = ImageComposer::compose(datasetLocalMeans, dataset.getImages().size(), compositionOrder);
-    finalImage.save("./Results/out.pgm");
+    ImageBase result = ImageComposer::compose(datasetLocalMeans, dataset.getImages().size(), compositionOrder);
+
+    ImageBase resizedOrigin = Utils::resizeImage(int image, imagesPerSide, imagettesSize);
+
+
+
+    result.save("./Results/out.pgm");
 
     return 0;
 }
