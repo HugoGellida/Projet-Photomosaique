@@ -281,6 +281,101 @@ float PSNRv2(ImageBase& imgIN, ImageBase& imgOUT) {
     }
 }
 
+double computeSSIM(const std::vector<double>& imgIN,
+                   const std::vector<double>& imgOUT) {
+    int N = imgIN.size();
+
+    // Moyennes
+    double m_x = 0.0, m_y = 0.0;
+    for (int i = 0; i < N; i++) {
+        m_x += imgIN[i];
+        m_y += imgOUT[i];
+    }
+    m_x /= N;
+    m_y /= N;
+
+    // Variances et covariance
+    double sigma_x = 0.0, sigma_y = 0.0, sigma_xy = 0.0;
+
+    for (int i = 0; i < N; i++) {
+        double dx = imgIN[i] - m_x;
+        double dy = imgOUT[i] - m_y;
+
+        sigma_x += dx * dx;
+        sigma_y += dy * dy;
+        sigma_xy += dx * dy;
+    }
+
+    sigma_x /= (N - 1);
+    sigma_y /= (N - 1);
+    sigma_xy /= (N - 1);
+
+    // Constantes
+    const double L = 255.0;
+    const double C1 = (0.01 * L) * (0.01 * L);
+    const double C2 = (0.03 * L) * (0.03 * L);
+
+    // SSIM
+    double numerator = (2 * m_x * m_y + C1) * (2 * sigma_xy + C2);
+    double denominator = (m_x * m_x + m_y * m_y + C1) *
+                         (sigma_x + sigma_y + C2);
+
+    return numerator / denominator;
+}
+
+double MeanSSIM(ImageBase& imgIN, ImageBase& imgOUT) {
+
+    int downscale = 4;
+  int taille = imgIN.getHeight();
+
+  std::vector<unsigned char> inputDataVecIN;
+  unsigned char *inputDataIN = imgIN->getData();
+  inputDataVecIN.insert(inputDataVecIN.end(), inputDataIN,
+                      inputDataIN + taille * taille);
+
+  std::vector<unsigned char> inputDataVecOUT;
+  unsigned char *inputDataOUT = imgOUT->getData();
+  inputDataVecOUT.insert(inputDataVecOUT.end(), inputDataOUT,
+                      inputDataOUT + taille * taille);
+
+  
+    std::vector<unsigned char> imgResizeIN = getImagesLocalMeans(inputDataVecIN, imgIN.getWidth(), imgIN.getHeight(), downscale);
+    std::vector<unsigned char> imgResizeOUT = getImagesLocalMeans(inputDataVecOUT, imgOUT.getWidth(), imgOUT.getHeight(), downscale);
+
+    int gridSize = 8;
+    int nbGridY = imgIN.getHeight() / gridSize / downscale;
+    int nbGridX = imgIN.getWidth() / gridSize / downscale;
+
+    double moyenne = 0.0;
+    int count = 0;
+    int resizedWidth = imgIN.getWidth() / downscale;
+
+    for (int gy = 0; gy < nbGridY; gy++) {
+        for (int gx = 0; gx < nbGridX; gx++) {
+
+            std::vector<double> blockIN;
+            std::vector<double> blockOUT;
+
+            for (int y = 0; y < gridSize; y++) {
+                for (int x = 0; x < gridSize; x++) {
+
+                    int iy = gy * gridSize + y;
+                    int ix = gx * gridSize + x;
+
+                    blockIN.push_back(imgResizeIN[iy * resizedWidth + ix]);
+                    blockOUT.push_back(imgResizeOUT[iy * resizedWidth + ix]);
+                }
+            }
+
+            moyenne += computeSSIM(blockIN, blockOUT);
+            count++;
+        }
+    }
+
+    return moyenne / count;
+}
+
+
 int diffHisto(ImageBase& imgIN, ImageBase& imgOUT) {
   int sideSize = imgIN.getHeight();
   std::vector<int> histoIN = std::vector<int>(256,0);
@@ -547,7 +642,7 @@ int main(int argc, char **argv) {
       datasetData, requested_width, requested_height, smallTileSizeInPixels);
 
   // Order images
-  std::vector<int> compositionOrder = orderImgPriority(targetLocalMeans, datasetMeans);
+  std::vector<int> compositionOrder = orderImgUnique(targetLocalMeans, datasetMeans);
 
   float psnr = PSNRv1(targetLocalMeans, datasetMeans, compositionOrder);
 
@@ -558,7 +653,9 @@ int main(int argc, char **argv) {
 
   ImageBase inputResize = resizeImage(inputDataVec);
   psnr = PSNRv2(inputResize, finalImage );
-  inputResize.save("test.pgm");
+
+  std::cout << "Moyenne SSIM : "<< MeanSSIM(inputResize, finalImage) << std::endl;
+  //inputResize.save("test.pgm");
 
   return 0;
 }
