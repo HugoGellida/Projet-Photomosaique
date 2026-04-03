@@ -45,15 +45,5 @@
         "cinttypes": "cpp",
         "typeinfo": "cpp",
         "fstream": "cpp"
-    },
-    "cmake.buildDirectory": "${workspaceFolder}/TP1_code/build",
-    "cmake.ignoreCMakeListsMissing": true,
-    "makefile.makefilePath": "./Strauss/Makefile",
-    "makefile.launchConfigurations": [
-        {
-            "cwd": "/home/hugogellida/Documents/M1S2/HAI804I",
-            "binaryPath": "/home/hugogellida/Documents/M1S2/HAI804I/bin",
-            "binaryArgs": []
-        }
-    ]
+    }
 }
