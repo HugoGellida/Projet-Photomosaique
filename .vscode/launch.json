@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/TP1_code/build/TP1",
+            "cwd": "${workspaceRoot}/TP1_code/build/",
+            "preLaunchTask": "build"
+        }
+    ]
+}
