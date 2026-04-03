@@ -325,16 +325,16 @@ double computeSSIM(const std::vector<double>& imgIN,
 
 double MeanSSIM(ImageBase& imgIN, ImageBase& imgOUT) {
 
-    int downscale = 4;
+  int downscale = 4;
   int taille = imgIN.getHeight();
 
   std::vector<unsigned char> inputDataVecIN;
-  unsigned char *inputDataIN = imgIN->getData();
+  unsigned char *inputDataIN = imgIN.getData();
   inputDataVecIN.insert(inputDataVecIN.end(), inputDataIN,
                       inputDataIN + taille * taille);
 
   std::vector<unsigned char> inputDataVecOUT;
-  unsigned char *inputDataOUT = imgOUT->getData();
+  unsigned char *inputDataOUT = imgOUT.getData();
   inputDataVecOUT.insert(inputDataVecOUT.end(), inputDataOUT,
                       inputDataOUT + taille * taille);
 
@@ -376,7 +376,7 @@ double MeanSSIM(ImageBase& imgIN, ImageBase& imgOUT) {
 }
 
 
-int diffHisto(ImageBase& imgIN, ImageBase& imgOUT) {
+int diffHistoGlobal(ImageBase& imgIN, ImageBase& imgOUT) {
   int sideSize = imgIN.getHeight();
   std::vector<int> histoIN = std::vector<int>(256,0);
   std::vector<int> histoOUT = std::vector<int>(256,0);
@@ -391,6 +391,29 @@ int diffHisto(ImageBase& imgIN, ImageBase& imgOUT) {
       d += abs(histoIN[i] - histoOUT[i]); 
     }
     return d;   
+}
+
+float diffHistoBlock(ImageBase& imgIN, ImageBase& imgOUT, int blockSize) {
+  int sideSize = imgIN.getHeight();
+  int nbBlock = sideSize / blockSize;
+  float totalError = 0;
+  for (int j = 0; j < sideSize; j+= blockSize){
+    for (int i = 0; i < sideSize; i+= blockSize){
+      std::vector<int> histoIN = std::vector<int>(256,0);
+      std::vector<int> histoOUT = std::vector<int>(256,0);
+      for (int y = 0; y < blockSize; ++y) {
+          for (int x = 0; x < blockSize; ++x) {
+              histoIN[imgIN[j+y][i+x]] ++;
+              histoOUT[imgOUT[j+y][i+x]] ++;
+          }
+        }
+
+      for (int k = 0; k < 256; k++) {
+          totalError += std::abs(histoIN[k] - histoOUT[k]);
+      }
+    }
+  }
+    return totalError / (nbBlock * nbBlock * 2 * blockSize * blockSize);
 }
 
 
@@ -642,7 +665,7 @@ int main(int argc, char **argv) {
       datasetData, requested_width, requested_height, smallTileSizeInPixels);
 
   // Order images
-  std::vector<int> compositionOrder = orderImgUnique(targetLocalMeans, datasetMeans);
+  std::vector<int> compositionOrder = orderImg(targetLocalMeans, datasetMeans);
 
   float psnr = PSNRv1(targetLocalMeans, datasetMeans, compositionOrder);
 
@@ -653,6 +676,8 @@ int main(int argc, char **argv) {
 
   ImageBase inputResize = resizeImage(inputDataVec);
   psnr = PSNRv2(inputResize, finalImage );
+
+  std::cout << " Diff moyenne d'histo : " << diffHistoBlock(inputResize, finalImage, smallTileSizeInPixels) << std::endl;
 
   std::cout << "Moyenne SSIM : "<< MeanSSIM(inputResize, finalImage) << std::endl;
   //inputResize.save("test.pgm");
