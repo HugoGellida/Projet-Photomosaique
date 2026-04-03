@@ -2,16 +2,17 @@
 #include <algorithm>
 #include <climits>
 
-std::vector<int>
-ImageOrdering::orderAllowRepeats(const std::vector<unsigned char> &target,
-                                 const std::vector<unsigned char> &dataset) {
+std::vector<int> ImageOrdering::orderAllowRepeats(const std::vector<unsigned char> &target,
+                          const std::vector<unsigned char> &dataset) {
 
   std::vector<int> selectedIndices;
   for (int i = 0; i < target.size(); i++) {
     int bestIndex = 0;
     for (int j = 1; j < dataset.size(); j++)
-      if ((target[i] - dataset[j]) * (target[i] - dataset[j]) <
-          (target[i] - dataset[bestIndex]) * (target[i] - dataset[bestIndex]))
+      if ((target[i] - dataset[j]) *
+              (target[i] - dataset[j]) <
+          (target[i] - dataset[bestIndex]) *
+              (target[i] - dataset[bestIndex]))
         bestIndex = j;
 
     selectedIndices.push_back(bestIndex);
@@ -20,9 +21,9 @@ ImageOrdering::orderAllowRepeats(const std::vector<unsigned char> &target,
   return selectedIndices;
 }
 
-std::vector<int>
-ImageOrdering::orderUnique(const std::vector<unsigned char> &target,
-                           const std::vector<unsigned char> &dataset) {
+
+std::vector<int> ImageOrdering::orderUnique(const std::vector<unsigned char> &target,
+               const std::vector<unsigned char> &dataset) {
 
   std::vector<int> selectedIndices(target.size(), -1);
   std::vector<bool> used(dataset.size(), false);
@@ -34,7 +35,8 @@ ImageOrdering::orderUnique(const std::vector<unsigned char> &target,
     for (int j = 0; j < dataset.size(); j++) {
       if (used[j])
         continue;
-      int dist = (target[i] - dataset[j]) * (target[i] - dataset[j]);
+      int dist = (target[i] - dataset[j]) *
+                 (target[i] - dataset[j]);
       if (dist < bestDist) {
         bestDist = dist;
         bestIndex = j;
@@ -55,9 +57,8 @@ struct Zone {
   int difficulty;
 };
 
-std::vector<int>
-ImageOrdering::orderPriority(const std::vector<unsigned char> &target,
-                             const std::vector<unsigned char> &dataset) {
+std::vector<int> ImageOrdering::orderPriority(const std::vector<unsigned char> &target,
+                 const std::vector<unsigned char> &dataset) {
 
   std::vector<int> selectedIndices(target.size(), -1);
   std::vector<bool> used(dataset.size(), false);
@@ -70,7 +71,9 @@ ImageOrdering::orderPriority(const std::vector<unsigned char> &target,
     zones[i].index = i;
     int count = 0;
     for (int j = 0; j < dataset.size(); j++)
-      if ((target[i] - dataset[j]) * (target[i] - dataset[j]) < threshold)
+      if ((target[i] - dataset[j]) *
+              (target[i] - dataset[j]) <
+          threshold)
         count++;
     zones[i].difficulty = count;
   }
@@ -114,13 +117,15 @@ ImageOrdering::orderPriority(const std::vector<unsigned char> &target,
         int imgA = selectedIndices[i];
         int imgB = selectedIndices[j];
 
-        int oldCost =
-            (target[i] - dataset[imgA]) * (target[i] - dataset[imgA]) +
-            (target[j] - dataset[imgB]) * (target[j] - dataset[imgB]);
+        int oldCost = (target[i] - dataset[imgA]) *
+                          (target[i] - dataset[imgA]) +
+                      (target[j] - dataset[imgB]) *
+                          (target[j] - dataset[imgB]);
 
-        int newCost =
-            (target[i] - dataset[imgB]) * (target[i] - dataset[imgB]) +
-            (target[j] - dataset[imgA]) * (target[j] - dataset[imgA]);
+        int newCost = (target[i] - dataset[imgB]) *
+                          (target[i] - dataset[imgB]) +
+                      (target[j] - dataset[imgA]) *
+                          (target[j] - dataset[imgA]);
 
         if (newCost < oldCost) {
           std::swap(selectedIndices[i], selectedIndices[j]);
