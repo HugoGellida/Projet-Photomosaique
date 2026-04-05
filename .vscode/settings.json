@@ -45,5 +45,8 @@
         "cinttypes": "cpp",
         "typeinfo": "cpp",
         "fstream": "cpp"
-    }
+    },
+    "C_Cpp.default.compileCommands": [
+        "${workspaceFolder}/build/compile_commands.json"
+    ]
 }

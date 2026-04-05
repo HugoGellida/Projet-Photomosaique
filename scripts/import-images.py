@@ -4,6 +4,7 @@ import requests
 from tqdm import tqdm
 import time
 from PIL import Image
+import shutil
 
 '''
   ======== TUTORIEL ========
@@ -38,9 +39,9 @@ dans la variable globale API_KEY dans l'onglet CONFIGURATION
 API_KEY = "wz57tsZ18vrNp421HZirfczUxgnk3pUH1KDuIMCNc3hb5TFon5uIOr76"    #! COLLEZ VOTRE CLE ICI
 QUERY = "nature"                                                        # Le thème d'images que vous voulez. Chaque images ont des tags, on met un tag ici pour filtrer notre recherche.
 PER_PAGE = 80                                                           # C'est le nombre d'images par pages que nous voulons prendre. Le maximum autorisé par Pexels est 80
-MAX_PAGES = 30                                                          # Le nombre de pages que vous voulez. Je ne connais pas le maximum
+MAX_PAGES = 1                                                          # Le nombre de pages que vous voulez. Je ne connais pas le maximum
 SAVE_DIR = "./temp"                                              # Le repertoire dans lequel nous voulons mettre nos images jpg. #! ATTENTION SI VOUS CHANGEZ LE NOM, SOYEZ SUR DE CHANGER LE NOM AUSSI DANS LE FICHIER .gitignore!!!
-OUTPUT_DIR = "./project/Images"                                  # Le repertoire dans lequel nous garderons le dataset
+OUTPUT_DIR = "./data/dataset"                                  # Le repertoire dans lequel nous garderons le dataset
 # ===============================
 
 
@@ -64,12 +65,9 @@ def count_images(dirname): #* Compte le nombre d'images contenu dans le dataset
     return count
 
 def clear_dataset(dirname):
-    image_extension = ".jpg"
-    for root, dirs, files in os.walk(dirname):
-        for file in files:
-            if file.lower().endswith(image_extension):
-                file_path = os.path.join(root, file)
-                os.remove(file_path)
+    if os.path.exists(dirname):
+        shutil.rmtree(dirname)
+        
 
 def resize(x=128, y=128):
     image_extension = ".jpg"
@@ -121,9 +119,6 @@ headers = {
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-print("========== STEP: CLEARING TEMPORAR DATASET ==========")
-clear_dataset(SAVE_DIR)
-print("TEMPORAR JPG DATASET CLEARED")
 print("========== STEP: FETCHING DATA FROM PEXELS ==========")
 
 for page in range(1, MAX_PAGES + 1):
@@ -158,6 +153,6 @@ print("DATASET READY FOR CONVERSION")
 print("========== STEP: CONVERSION FROM JPG TO PGM ==========")
 convert(SAVE_DIR, OUTPUT_DIR)
 print("DATASET READY FOR USE")
-print("========== STEP: CLEARING TEMPORAR DATASET ==========")
+print("========== STEP: DELETING TEMPORAR DATASET ==========")
 clear_dataset(SAVE_DIR)
 print("TEMPORAR JPG DATASET CLEARED")

@@ -1,0 +1,146 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/nvcc",
+      "-arch=sm_60",
+      "-O2",
+      "-std=c++17",
+      "-Iinclude",
+      "-Xcompiler",
+      "-Wno-unused-result",
+      "-c",
+      "-o",
+      "build/utils/Utils.o",
+      "src/utils/Utils.cpp"
+    ],
+    "directory": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique",
+    "file": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/src/utils/Utils.cpp",
+    "output": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/build/utils/Utils.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/nvcc",
+      "-arch=sm_60",
+      "-O2",
+      "-std=c++17",
+      "-Iinclude",
+      "-Xcompiler",
+      "-Wno-unused-result",
+      "-c",
+      "-o",
+      "build/core/ImageOrdering.o",
+      "src/core/ImageOrdering.cpp"
+    ],
+    "directory": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique",
+    "file": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/src/core/ImageOrdering.cpp",
+    "output": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/build/core/ImageOrdering.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/nvcc",
+      "-arch=sm_60",
+      "-O2",
+      "-std=c++17",
+      "-Iinclude",
+      "-Xcompiler",
+      "-Wno-unused-result",
+      "-c",
+      "-o",
+      "build/core/ImageEvaluator.o",
+      "src/core/ImageEvaluator.cpp"
+    ],
+    "directory": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique",
+    "file": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/src/core/ImageEvaluator.cpp",
+    "output": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/build/core/ImageEvaluator.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/nvcc",
+      "-arch=sm_60",
+      "-O2",
+      "-std=c++17",
+      "-Iinclude",
+      "-Xcompiler",
+      "-Wno-unused-result",
+      "-c",
+      "-o",
+      "build/core/ImageBase.o",
+      "src/core/ImageBase.cpp"
+    ],
+    "directory": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique",
+    "file": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/src/core/ImageBase.cpp",
+    "output": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/build/core/ImageBase.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/nvcc",
+      "-arch=sm_60",
+      "-O2",
+      "-std=c++17",
+      "-Iinclude",
+      "-Xcompiler",
+      "-Wno-unused-result",
+      "-c",
+      "-o",
+      "build/core/ImageComposer.o",
+      "src/core/ImageComposer.cpp"
+    ],
+    "directory": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique",
+    "file": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/src/core/ImageComposer.cpp",
+    "output": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/build/core/ImageComposer.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/nvcc",
+      "-arch=sm_60",
+      "-O2",
+      "-std=c++17",
+      "-Iinclude",
+      "-Xcompiler",
+      "-Wno-unused-result",
+      "-c",
+      "-o",
+      "build/dataset/DatasetManager.o",
+      "src/dataset/DatasetManager.cpp"
+    ],
+    "directory": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique",
+    "file": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/src/dataset/DatasetManager.cpp",
+    "output": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/build/dataset/DatasetManager.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/nvcc",
+      "-arch=sm_60",
+      "-O2",
+      "-std=c++17",
+      "-Iinclude",
+      "-Xcompiler",
+      "-Wno-unused-result",
+      "-c",
+      "-o",
+      "build/main.o",
+      "src/main.cpp"
+    ],
+    "directory": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique",
+    "file": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/src/main.cpp",
+    "output": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/build/main.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/nvcc",
+      "-arch=sm_60",
+      "-O2",
+      "-std=c++17",
+      "-Iinclude",
+      "-Xcompiler",
+      "-Wno-unused-result",
+      "-c",
+      "-o",
+      "build/core/ImageProcessor.o",
+      "src/core/ImageProcessor.cu"
+    ],
+    "directory": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique",
+    "file": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/src/core/ImageProcessor.cu",
+    "output": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/build/core/ImageProcessor.o"
+  }
+]

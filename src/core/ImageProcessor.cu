@@ -1,4 +1,4 @@
-#include "ImageProcessor.h"
+#include "core/ImageProcessor.h"
 #include <vector>
 
 __global__ void sumImages(unsigned char *inputImages, unsigned int *imageSums,
@@ -110,55 +110,68 @@ __global__ void divideAreas(unsigned int *areaSums, unsigned char *areaMeans,
 }
 
 // Compute local means for image areas
-std::vector<unsigned char> ImageProcessor::getLocalMeans(const std::vector<unsigned char>& imageData, int width, int height, int divider) {
+std::vector<unsigned char>
+ImageProcessor::getLocalMeans(const std::vector<unsigned char> &imageData,
+                              int width, int height, int divider) {
 
-    size_t imageSize = width * height;
-    size_t pixelsPerArea = (width / divider) * (height / divider);
-    size_t numAreas = divider * divider;
-    int numImages = imageData.size() / imageSize;
-    int blockSize = 16;
+  size_t imageSize = width * height;
+  size_t pixelsPerArea = (width / divider) * (height / divider);
+  size_t numAreas = divider * divider;
+  int numImages = imageData.size() / imageSize;
+  int blockSize = 16;
 
-    dim3 blockDims(blockSize, blockSize);
-    dim3 gridDims((width + blockSize - 1) / blockSize,
-                    (height + blockSize - 1) / blockSize, numImages);
+  dim3 blockDims(blockSize, blockSize);
+  dim3 gridDims((width + blockSize - 1) / blockSize,
+                (height + blockSize - 1) / blockSize, numImages);
 
-    int threadsPerBlock = 256;
-    dim3 divBlock(threadsPerBlock);
-    dim3 divGrid((numAreas + threadsPerBlock - 1) / threadsPerBlock, numImages);
+  int threadsPerBlock = 256;
+  dim3 divBlock(threadsPerBlock);
+  dim3 divGrid((numAreas + threadsPerBlock - 1) / threadsPerBlock, numImages);
 
-    unsigned char *d_input;
-    cudaMalloc((void **)&d_input, numImages * imageSize * sizeof(unsigned char));
+  unsigned char *d_input;
+  cudaMalloc((void **)&d_input, numImages * imageSize * sizeof(unsigned char));
 
-    unsigned int *d_areaSums;
-    cudaMalloc((void **)&d_areaSums, numImages * numAreas * sizeof(unsigned int));
+  unsigned int *d_areaSums;
+  cudaMalloc((void **)&d_areaSums, numImages * numAreas * sizeof(unsigned int));
 
-    unsigned char *d_areaMeans;
-    cudaMalloc((void **)&d_areaMeans, numImages * numAreas * sizeof(unsigned char));
-    cudaMemcpy(d_input, imageData.data(), numImages * imageSize * sizeof(unsigned char), cudaMemcpyHostToDevice);
-    areaSums<<<gridDims, blockDims>>>(d_input, d_areaSums, width, height, divider);
-    cudaDeviceSynchronize();
-    divideAreas<<<divGrid, divBlock>>>(d_areaSums, d_areaMeans, numAreas, pixelsPerArea);
-    cudaDeviceSynchronize();
-    std::vector<unsigned char> hostMeans(numImages * numAreas);
-    cudaMemcpy(hostMeans.data(), d_areaMeans, numImages * numAreas * sizeof(unsigned char), cudaMemcpyDeviceToHost);
+  unsigned char *d_areaMeans;
+  cudaMalloc((void **)&d_areaMeans,
+             numImages * numAreas * sizeof(unsigned char));
+  cudaMemcpy(d_input, imageData.data(),
+             numImages * imageSize * sizeof(unsigned char),
+             cudaMemcpyHostToDevice);
+  areaSums<<<gridDims, blockDims>>>(d_input, d_areaSums, width, height,
+                                    divider);
+  cudaDeviceSynchronize();
+  divideAreas<<<divGrid, divBlock>>>(d_areaSums, d_areaMeans, numAreas,
+                                     pixelsPerArea);
+  cudaDeviceSynchronize();
+  std::vector<unsigned char> hostMeans(numImages * numAreas);
+  cudaMemcpy(hostMeans.data(), d_areaMeans,
+             numImages * numAreas * sizeof(unsigned char),
+             cudaMemcpyDeviceToHost);
 
-    cudaFree(d_input);
-    cudaFree(d_areaSums);
-    cudaFree(d_areaMeans);
+  cudaFree(d_input);
+  cudaFree(d_areaSums);
+  cudaFree(d_areaMeans);
 
-    return hostMeans;
+  return hostMeans;
 }
 
 // Compute mean intensity for entire images
-std::vector<unsigned char> ImageProcessor::getGlobalMeans(const std::vector<unsigned char>& imagesData, int width, int height) {
+std::vector<unsigned char>
+ImageProcessor::getGlobalMeans(const std::vector<unsigned char> &imagesData,
+                               int width, int height) {
 
   size_t numImages = imagesData.size() / (width * height);
   size_t imageSize = width * height;
   int blockSize = 16;
   dim3 blockDims(blockSize, blockSize);
-  dim3 gridDims((width + blockSize - 1) / blockSize, (height + blockSize - 1) / blockSize, numImages);
+  dim3 gridDims((width + blockSize - 1) / blockSize,
+                (height + blockSize - 1) / blockSize, numImages);
   dim3 divBlock(blockSize * blockSize);
-  dim3 divGrid((numImages + blockSize * blockSize - 1) / (blockSize * blockSize));
+  dim3 divGrid((numImages + blockSize * blockSize - 1) /
+               (blockSize * blockSize));
 
   unsigned char *d_input;
   cudaMalloc((void **)&d_input, numImages * imageSize * sizeof(unsigned char));

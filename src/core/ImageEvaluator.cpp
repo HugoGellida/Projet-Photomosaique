@@ -1,4 +1,4 @@
-#include "ImageEvaluator.h"
+#include "core/ImageEvaluator.h"
 #include <cmath>
 #include <vector>
 
@@ -27,8 +27,7 @@ float ImageEvaluator::PSNR(ImageBase &origin, ImageBase &output) {
   }
 }
 
-int ImageEvaluator::diffHisto(ImageBase &origin,
-                              ImageBase &output) {
+int ImageEvaluator::diffHisto(ImageBase &origin, ImageBase &output) {
   int sideSize = origin.getHeight();
   std::vector<int> histoInput = std::vector<int>(256, 0);
   std::vector<int> histoOutput = std::vector<int>(256, 0);

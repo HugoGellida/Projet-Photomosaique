@@ -1,6 +1,4 @@
-project/Results/
-venv/
-project/Images/
-temp/
-pexels_architecture/
-project/pexels_images/
+results/*
+data/dataset/*
+bin/*
+build/.cache/*
