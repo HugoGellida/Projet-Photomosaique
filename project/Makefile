@@ -1,11 +1,13 @@
 # Compilateur CUDA
-NVCC = nvcc -ccbin /usr/bin/gcc-10
+NVCC = nvcc
 
 # Nom de l'exécutable
 TARGET = main
 
 # Fichiers sources
-SRC = main.cpp ImageBase.cpp DatasetManager.cpp ImageProcessor.cu ImageOrdering.cpp ImageComposer.cpp ImageEvaluator.cpp Utils.cpp
+CPP_SRC := $(wildcard *.cpp)
+CU_SRC := $(wildcard *.cu)
+SRC = $(CPP_SRC) $(CU_SRC)
 
 # Options de compilation
 CFLAGS = -O2 -std=c++17
