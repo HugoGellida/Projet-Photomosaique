@@ -1,5 +1,5 @@
 # Compilateur CUDA
-NVCC = nvcc -ccbin /usr/bin/gcc-10
+NVCC = nvcc #-ccbin /usr/bin/gcc-10
 
 # Nom de l'exécutable
 TARGET = bin/app

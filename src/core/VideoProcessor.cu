@@ -1,6 +1,6 @@
-#include "ImageComposer.h"
-#include "ImageProcessor.h"
-#include "VideoProcessor.h"
+#include "core/ImageComposer.h"
+#include "core/ImageProcessor.h"
+#include "core/VideoProcessor.h"
 #include <algorithm>
 #include <climits>
 #include <cmath>

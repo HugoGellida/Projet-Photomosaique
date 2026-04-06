@@ -142,5 +142,23 @@
     "directory": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique",
     "file": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/src/core/ImageProcessor.cu",
     "output": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/build/core/ImageProcessor.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/nvcc",
+      "-arch=sm_60",
+      "-O2",
+      "-std=c++17",
+      "-Iinclude",
+      "-Xcompiler",
+      "-Wno-unused-result",
+      "-c",
+      "-o",
+      "build/core/VideoProcessor.o",
+      "src/core/VideoProcessor.cu"
+    ],
+    "directory": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique",
+    "file": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/src/core/VideoProcessor.cu",
+    "output": "/home/hugogellida/Documents/M1S2/Projet-Photomosaique/build/core/VideoProcessor.o"
   }
 ]
