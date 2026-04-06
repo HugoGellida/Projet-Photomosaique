@@ -10,9 +10,24 @@
 #include <stdio.h>
 #include <string>
 #include <vector>
+#include <climits>
 
-int sideOfImage = 64; // number of tiles per row/column for final image
-int smallTileSizeInPixels = 64; // size of each small image tile
+#define CUDA_CHECK(call) \
+{ \
+    cudaError_t err = call; \
+    if (err != cudaSuccess) { \
+        std::cerr << "CUDA error: " << cudaGetErrorString(err) << std::endl; \
+        exit(1); \
+    } \
+}
+
+int sideOfImage = 128; // number of tiles per row/column for final image
+int smallTileSizeInPixels = 16; // size of each small image tile
+const int videoWidthInput = 512; // expected width of input video frames
+const int videoHeightInput = 512; // expected height of input video frames
+const int videoWidth  = sideOfImage * smallTileSizeInPixels; // largeur de la vidéo/frame
+const int videoHeight = sideOfImage * smallTileSizeInPixels; // hauteur de la vidéo/frame
+const int fps         = 30;
 
 int requested_width = 128;  // expected width of dataset images
 int requested_height = 128; // expected height of dataset images
@@ -149,14 +164,16 @@ getImagesLocalMeans(std::vector<unsigned char> imageData, int width, int height,
   dim3 divGrid((numAreas + threadsPerBlock - 1) / threadsPerBlock, numImages);
 
   unsigned char *d_input;
-  cudaMalloc((void **)&d_input, numImages * imageSize * sizeof(unsigned char));
+  CUDA_CHECK(cudaMalloc((void **)&d_input, numImages * imageSize * sizeof(unsigned char)));
 
   unsigned int *d_areaSums;
-  cudaMalloc((void **)&d_areaSums, numImages * numAreas * sizeof(unsigned int));
+  CUDA_CHECK(cudaMalloc((void **)&d_areaSums, numImages * numAreas * sizeof(unsigned int)));
 
   unsigned char *d_areaMeans;
-  cudaMalloc((void **)&d_areaMeans,
-             numImages * numAreas * sizeof(unsigned char));
+  CUDA_CHECK(cudaMalloc((void **)&d_areaMeans,
+             numImages * numAreas * sizeof(unsigned char)));
+
+  cudaMemset(d_areaSums, 0, numImages * numAreas * sizeof(unsigned int));
 
   cudaMemcpy(d_input, imageData.data(),
              numImages * imageSize * sizeof(unsigned char),
@@ -281,102 +298,7 @@ float PSNRv2(ImageBase& imgIN, ImageBase& imgOUT) {
     }
 }
 
-double computeSSIM(const std::vector<double>& imgIN,
-                   const std::vector<double>& imgOUT) {
-    int N = imgIN.size();
-
-    // Moyennes
-    double m_x = 0.0, m_y = 0.0;
-    for (int i = 0; i < N; i++) {
-        m_x += imgIN[i];
-        m_y += imgOUT[i];
-    }
-    m_x /= N;
-    m_y /= N;
-
-    // Variances et covariance
-    double sigma_x = 0.0, sigma_y = 0.0, sigma_xy = 0.0;
-
-    for (int i = 0; i < N; i++) {
-        double dx = imgIN[i] - m_x;
-        double dy = imgOUT[i] - m_y;
-
-        sigma_x += dx * dx;
-        sigma_y += dy * dy;
-        sigma_xy += dx * dy;
-    }
-
-    sigma_x /= (N - 1);
-    sigma_y /= (N - 1);
-    sigma_xy /= (N - 1);
-
-    // Constantes
-    const double L = 255.0;
-    const double C1 = (0.01 * L) * (0.01 * L);
-    const double C2 = (0.03 * L) * (0.03 * L);
-
-    // SSIM
-    double numerator = (2 * m_x * m_y + C1) * (2 * sigma_xy + C2);
-    double denominator = (m_x * m_x + m_y * m_y + C1) *
-                         (sigma_x + sigma_y + C2);
-
-    return numerator / denominator;
-}
-
-double MeanSSIM(ImageBase& imgIN, ImageBase& imgOUT) {
-
-  int downscale = 4;
-  int taille = imgIN.getHeight();
-
-  std::vector<unsigned char> inputDataVecIN;
-  unsigned char *inputDataIN = imgIN.getData();
-  inputDataVecIN.insert(inputDataVecIN.end(), inputDataIN,
-                      inputDataIN + taille * taille);
-
-  std::vector<unsigned char> inputDataVecOUT;
-  unsigned char *inputDataOUT = imgOUT.getData();
-  inputDataVecOUT.insert(inputDataVecOUT.end(), inputDataOUT,
-                      inputDataOUT + taille * taille);
-
-  
-    std::vector<unsigned char> imgResizeIN = getImagesLocalMeans(inputDataVecIN, imgIN.getWidth(), imgIN.getHeight(), downscale);
-    std::vector<unsigned char> imgResizeOUT = getImagesLocalMeans(inputDataVecOUT, imgOUT.getWidth(), imgOUT.getHeight(), downscale);
-
-    int gridSize = 8;
-    int nbGridY = imgIN.getHeight() / gridSize / downscale;
-    int nbGridX = imgIN.getWidth() / gridSize / downscale;
-
-    double moyenne = 0.0;
-    int count = 0;
-    int resizedWidth = imgIN.getWidth() / downscale;
-
-    for (int gy = 0; gy < nbGridY; gy++) {
-        for (int gx = 0; gx < nbGridX; gx++) {
-
-            std::vector<double> blockIN;
-            std::vector<double> blockOUT;
-
-            for (int y = 0; y < gridSize; y++) {
-                for (int x = 0; x < gridSize; x++) {
-
-                    int iy = gy * gridSize + y;
-                    int ix = gx * gridSize + x;
-
-                    blockIN.push_back(imgResizeIN[iy * resizedWidth + ix]);
-                    blockOUT.push_back(imgResizeOUT[iy * resizedWidth + ix]);
-                }
-            }
-
-            moyenne += computeSSIM(blockIN, blockOUT);
-            count++;
-        }
-    }
-
-    return moyenne / count;
-}
-
-
-int diffHistoGlobal(ImageBase& imgIN, ImageBase& imgOUT) {
+int diffHisto(ImageBase& imgIN, ImageBase& imgOUT) {
   int sideSize = imgIN.getHeight();
   std::vector<int> histoIN = std::vector<int>(256,0);
   std::vector<int> histoOUT = std::vector<int>(256,0);
@@ -391,29 +313,6 @@ int diffHistoGlobal(ImageBase& imgIN, ImageBase& imgOUT) {
       d += abs(histoIN[i] - histoOUT[i]); 
     }
     return d;   
-}
-
-float diffHistoBlock(ImageBase& imgIN, ImageBase& imgOUT, int blockSize) {
-  int sideSize = imgIN.getHeight();
-  int nbBlock = sideSize / blockSize;
-  float totalError = 0;
-  for (int j = 0; j < sideSize; j+= blockSize){
-    for (int i = 0; i < sideSize; i+= blockSize){
-      std::vector<int> histoIN = std::vector<int>(256,0);
-      std::vector<int> histoOUT = std::vector<int>(256,0);
-      for (int y = 0; y < blockSize; ++y) {
-          for (int x = 0; x < blockSize; ++x) {
-              histoIN[imgIN[j+y][i+x]] ++;
-              histoOUT[imgOUT[j+y][i+x]] ++;
-          }
-        }
-
-      for (int k = 0; k < 256; k++) {
-          totalError += std::abs(histoIN[k] - histoOUT[k]);
-      }
-    }
-  }
-    return totalError / (nbBlock * nbBlock * 2 * blockSize * blockSize);
 }
 
 
@@ -461,6 +360,23 @@ ImageBase composeImg(const std::vector<unsigned char> &smallImagesData,
                               x * smallImageSide + y];
 
   return output;
+}
+
+void composeImgV2(const std::vector<unsigned char> &smallImagesData,
+                     int numImages, const std::vector<int> &composition, ImageBase& output) {
+
+  int smallImageSize = smallImagesData.size() / numImages;
+  int smallImageSide = sqrt(smallImageSize);
+  int gridSide = sqrt(composition.size());
+
+  for (int tileX = 0; tileX < gridSide; tileX++)
+    for (int tileY = 0; tileY < gridSide; tileY++)
+      for (int x = 0; x < smallImageSide; x++)
+        for (int y = 0; y < smallImageSide; y++)
+          output[x + tileX * smallImageSide][y + tileY * smallImageSide] =
+              smallImagesData[composition[tileX * gridSide + tileY] *
+                                  smallImageSize +
+                              x * smallImageSide + y];
 }
 
 // Select images allowing repeats
@@ -604,6 +520,166 @@ orderImgPriority(const std::vector<unsigned char> &targetLocalMeans,
   return selectedIndices;
 }
 
+std::vector<int> processFrameSmart(
+    const std::vector<unsigned char>& currentMeans,
+    const std::vector<unsigned char>& datasetMeans,
+    std::vector<int>& prevComposition,
+    float threshold)
+    {
+      std::vector<int> composition(currentMeans.size());
+      if (prevComposition.empty() || prevComposition[0] == -1) {
+        composition = orderImg(currentMeans, datasetMeans);
+        prevComposition = composition;
+        return composition;
+      }
+      
+      for (int i = 0; i < currentMeans.size(); i++) {
+        
+        float diff = abs(currentMeans[i] - datasetMeans[prevComposition[i]]);
+        
+        if (diff < threshold) {
+          composition[i] = prevComposition[i];
+          continue;
+        }
+        
+        int bestIndex = 0;
+        int bestDist = INT_MAX;
+        
+        for (int j = 0; j < datasetMeans.size(); j++) {
+          int dist = (currentMeans[i] - datasetMeans[j]) *
+          (currentMeans[i] - datasetMeans[j]);
+          
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestIndex = j;
+            if (bestDist == 0)
+            break;
+          }
+        }
+        
+        composition[i] = bestIndex;
+      }
+      
+      prevComposition = composition;
+      return composition;
+    }
+
+    ImageBase processFrame(const unsigned char* frameData,
+                           int width, int height,
+                           const std::vector<unsigned char>& datasetLocalMeans,
+                           const std::vector<unsigned char>& datasetMeans,
+                           std::vector<int>& prevComposition) {
+        std::vector<unsigned char> currentMeans =
+            getImagesLocalMeans(std::vector<unsigned char>(frameData, frameData + width*height),
+                                width, height, sideOfImage); // taille du blo
+    
+        std::vector<int> composition =
+            processFrameSmart(currentMeans, datasetMeans, prevComposition, 15.0f);
+    
+        ImageBase result = composeImg(datasetLocalMeans, datasetMeans.size(), composition);
+        return result;
+    }
+    
+    __global__ void processFrameSmartKernel(
+    const unsigned char* currentMeans,
+    const unsigned char* datasetMeans,
+    const int* prevComposition,
+    int* composition,
+    int sideOfImage,
+    int numDatasetImages,
+    float threshold)
+{
+    // Coordonnées 2D dans la grille de tiles
+    int tileX = blockIdx.x * blockDim.x + threadIdx.x;
+    int tileY = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (tileX >= sideOfImage || tileY >= sideOfImage) return;
+
+    int i = tileY * sideOfImage + tileX;
+
+    float diff = fabsf((float)currentMeans[i] - (float)datasetMeans[prevComposition[i]]);
+    if (diff < threshold) {
+        composition[i] = prevComposition[i];
+        return;
+    }
+
+    int bestIndex = 0;
+    int bestDist = INT_MAX;
+
+    for (int j = 0; j < numDatasetImages; j++) {
+        int d = ((int)currentMeans[i] - (int)datasetMeans[j]);
+        int dist = d * d;
+        if (dist < bestDist) {
+            bestDist = dist;
+            bestIndex = j;
+            if (bestDist == 0) break;
+        }
+    }
+
+    composition[i] = bestIndex;
+}
+
+void processFrameGPU(
+    const unsigned char* frameData,
+    int width, int height,
+    const std::vector<unsigned char>& datasetLocalMeans,
+    const std::vector<unsigned char>& datasetMeans,
+    std::vector<int>& prevComposition,
+    ImageBase& output,
+    unsigned char* d_currentMeans,
+    unsigned char* d_datasetMeans,
+    int* d_prevCompGPU,
+    int* d_compositionGPU)
+{
+    // 1. Calcul des moyennes locales de la frame actuelle (CPU)
+    std::vector<unsigned char> currentMeans =
+            getImagesLocalMeans(std::vector<unsigned char>(frameData, frameData + width*height),
+                                width, height, sideOfImage);
+
+    int numTiles = currentMeans.size();
+    int numDatasetImages = datasetMeans.size();
+
+    // 2. Initialisation pour la première frame
+    if (prevComposition.empty() || prevComposition[0] == -1) {
+        prevComposition = orderImg(currentMeans, datasetMeans);
+    }
+
+    // 3. Transfert CPU -> GPU
+    cudaMemcpy(d_currentMeans, currentMeans.data(), numTiles * sizeof(unsigned char), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_prevCompGPU, prevComposition.data(), numTiles * sizeof(int), cudaMemcpyHostToDevice);
+
+    // 4. Lancement du kernel 2D
+    dim3 threadsPerBlock(16, 16);
+    dim3 numBlocks((sideOfImage + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                   (sideOfImage + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    processFrameSmartKernel<<<numBlocks, threadsPerBlock>>>(
+        d_currentMeans,
+        d_datasetMeans,
+        d_prevCompGPU,
+        d_compositionGPU,
+        sideOfImage,
+        numDatasetImages,
+        15.0f
+    );
+    cudaDeviceSynchronize();
+
+    // 5. Transfert GPU -> CPU
+    std::vector<int> composition = processFrameSmart(currentMeans, datasetMeans, prevComposition, 15.0f);
+    prevComposition = composition;
+    //cudaMemcpy(prevComposition.data(), d_compositionGPU, numTiles * sizeof(int), cudaMemcpyDeviceToHost);
+
+    /* for(int n=0; n < numTiles; ++n) {
+    if (prevComposition[n] < 0 || prevComposition[n] >= numDatasetImages) {
+        // Si ça arrive, c'est que le GPU a écrit n'importe quoi
+        std::cout << "GPU error: invalid index " << prevComposition[n] << " at tile " << n << std::endl;
+        prevComposition[n] = 0; 
+    } */
+    // 6. Reconstruction de l'image mosaïque (CPU)
+    composeImgV2(datasetLocalMeans, numDatasetImages, prevComposition, output);
+}
+
+
 //* ======== MAIN ========
 
 int main(int argc, char **argv) {
@@ -613,7 +689,7 @@ int main(int argc, char **argv) {
   }
 
   // Load target image
-  char *inputPath = argv[1];
+  /* char *inputPath = argv[1];
   ImageBase *inputImage = new ImageBase();
   inputImage->load(inputPath);
 
@@ -623,7 +699,7 @@ int main(int argc, char **argv) {
   std::vector<unsigned char> inputDataVec;
   unsigned char *inputData = inputImage->getData();
   inputDataVec.insert(inputDataVec.end(), inputData,
-                      inputData + width * height);
+                      inputData + width * height); */
 
   // Load dataset images
   char *datasetFolder = argv[2];
@@ -656,18 +732,116 @@ int main(int argc, char **argv) {
   }
   std::cout << std::endl;
 
+  std::string inputVideo = argv[1];
+  
+
+// Préparer le pipe pour lire la vidéo
+    std::string ffmpegReadCmd =
+        "ffmpeg -i " + inputVideo +
+        " -f rawvideo -pix_fmt gray -s " + std::to_string(videoWidthInput) + "x" + std::to_string(videoHeightInput) +
+        " -r " + std::to_string(fps) + " -";
+
+    FILE* ffmpegRead = popen(ffmpegReadCmd.c_str(), "r");
+    if (!ffmpegRead) { std::cerr << "Failed to open ffmpeg input\n"; return 1; }
+
+    // Préparer le pipe pour écrire la vidéo de sortie
+    std::string ffmpegWriteCmd =
+        "ffmpeg -y -f rawvideo -pix_fmt gray -s " +
+        std::to_string(videoWidth) + "x" + std::to_string(videoHeight) +
+        " -r " + std::to_string(fps) + " -i - -c:v libx264 -crf 28 output.mp4";
+
+    FILE* ffmpegWrite = popen(ffmpegWriteCmd.c_str(), "w");
+    if (!ffmpegWrite) { std::cerr << "Failed to open ffmpeg output\n"; return 1; }
+  
+  
+  
+  
   // Compute global and local means
   std::vector<unsigned char> datasetMeans =
       getImagesMeans(datasetData, requested_width, requested_height);
-  std::vector<unsigned char> targetLocalMeans =
-      getImagesLocalMeans(inputDataVec, width, height, sideOfImage);
+  /* std::vector<unsigned char> targetLocalMeans =
+      getImagesLocalMeans(inputDataVec, width, height, sideOfImage); */
   std::vector<unsigned char> datasetLocalMeans = getImagesLocalMeans(
       datasetData, requested_width, requested_height, smallTileSizeInPixels);
 
-  // Order images
-  std::vector<int> compositionOrder = orderImg(targetLocalMeans, datasetMeans);
 
-  float psnr = PSNRv1(targetLocalMeans, datasetMeans, compositionOrder);
+    unsigned char *d_currentMeans, *d_datasetMeans;
+int *d_prevCompGPU, *d_compositionGPU;
+
+int numTiles = sideOfImage * sideOfImage;
+int numDataset = datasetMeans.size();
+
+CUDA_CHECK(cudaMalloc(&d_currentMeans, numTiles * sizeof(unsigned char)));
+CUDA_CHECK(cudaMalloc(&d_datasetMeans, numDataset * sizeof(unsigned char)));
+CUDA_CHECK(cudaMalloc(&d_prevCompGPU, numTiles * sizeof(int)));
+CUDA_CHECK(cudaMalloc(&d_compositionGPU, numTiles * sizeof(int)));
+
+
+cudaMemcpy(d_datasetMeans, datasetMeans.data(), numDataset * sizeof(unsigned char), cudaMemcpyHostToDevice);
+
+std::vector<int> prevComposition(numTiles, -1);
+std::vector<int> prevTEST(numTiles, -1);
+
+size_t frameSize = videoWidth * videoHeight;
+size_t frameInputSize = videoWidthInput * videoHeightInput;
+ImageBase mosaic(videoWidth, videoHeight, false);
+std::vector<unsigned char> buffer(frameInputSize);
+
+size_t frameIndex = 0;
+while (fread(buffer.data(), 1, frameInputSize, ffmpegRead) == frameInputSize) {
+    
+    /*processFrameGPU(buffer.data(),
+                    videoWidthInput, videoHeightInput,
+                    datasetLocalMeans,
+                    datasetMeans,
+                    prevComposition,
+                    mosaic,
+                    d_currentMeans, 
+                    d_datasetMeans, 
+                    d_prevCompGPU, 
+                    d_compositionGPU);*/
+
+                    //prevTEST = prevComposition; // pour debug
+
+
+      ImageBase mosaicCPU = processFrame(buffer.data(),
+                    videoWidthInput, videoHeightInput,
+                    datasetLocalMeans,
+                    datasetMeans,
+                    prevComposition);
+
+      /* int diff = 0;
+    for (int i = 0; i < numTiles; i++){
+        if (prevComposition[i] != prevTEST[i]) diff++;
+    }
+
+    std::cout << "Frame " << frameIndex << " - indices differents: " << diff << "/" << numTiles << std::endl; */
+      
+    
+    size_t written = fwrite(mosaicCPU.getData(), 1, frameSize, ffmpegWrite);
+    /* if (written != frameSize) {
+        std::cerr << "\nError writing frame " << frameIndex << std::endl;
+        break;
+    } */
+    
+    //if (frameIndex % 5 == 0) fflush(ffmpegWrite);
+    
+    std::cout << "\rProcessing frame " << frameIndex++ << std::flush;
+}
+
+// --- NETTOYAGE ---
+cudaFree(d_currentMeans);
+cudaFree(d_datasetMeans);
+cudaFree(d_prevCompGPU);
+cudaFree(d_compositionGPU);
+
+pclose(ffmpegRead);
+pclose(ffmpegWrite);
+
+std::cout << "\nDone. Video written to output.mp4\n";
+
+
+ /*  float psnr = PSNRv1(targetLocalMeans, datasetMeans, compositionOrder);
 
   // Compose final image
   ImageBase finalImage =
@@ -676,11 +850,8 @@ int main(int argc, char **argv) {
 
   ImageBase inputResize = resizeImage(inputDataVec);
   psnr = PSNRv2(inputResize, finalImage );
-
-  std::cout << " Diff moyenne d'histo : " << diffHistoBlock(inputResize, finalImage, smallTileSizeInPixels) << std::endl;
-
-  std::cout << "Moyenne SSIM : "<< MeanSSIM(inputResize, finalImage) << std::endl;
-  //inputResize.save("test.pgm");
+  std::cout << "diffHisto : " << diffHisto(inputResize, finalImage) << std::endl;
+  //inputResize.save("test.pgm"); */
 
   return 0;
 }
