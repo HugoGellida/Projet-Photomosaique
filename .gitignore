@@ -1,6 +1,5 @@
-project/Results/
-venv/
-project/Images/
+project/Results/*
+project/Images/*
 temp/
-pexels_architecture/
-project/pexels_images/
+pexels_architecture/*
+project/pexels_images/*
