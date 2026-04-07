@@ -26,8 +26,8 @@ public:
 
 	///////////// Attributs
 protected:
-	unsigned char *data;
-	double *dataD;
+	unsigned char *data = nullptr;
+	double *dataD = nullptr;
 
 	bool color;
 	int height;

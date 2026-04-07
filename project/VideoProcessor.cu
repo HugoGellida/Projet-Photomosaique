@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <climits>
 #include <cmath>
+#include <iostream>
 
 std::vector<int> VideoProcessor::processFrameSmart(
     const std::vector<unsigned char> &currentMeans,
@@ -195,8 +196,7 @@ ImageBase VideoProcessor::processFrameUnique(
       processFrameSmartUnique(currentMeans, datasetMeans, prevComposition, 15.0f, used);
 
   // Compose final image
-  ImageBase result = ImageComposer::compose(datasetLocalMeans,
-                                            datasetMeans.size(), composition);
+  ImageBase result = ImageComposer::compose(datasetLocalMeans, datasetMeans.size(), composition);
   return result;
 }
 

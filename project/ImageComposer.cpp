@@ -1,5 +1,6 @@
 #include "ImageComposer.h"
 #include <cmath>
+#include <iostream>
 
 ImageBase ImageComposer::compose(const std::vector<unsigned char> &tilesData,
                                  int numTiles,
@@ -14,9 +15,8 @@ ImageBase ImageComposer::compose(const std::vector<unsigned char> &tilesData,
     for (int tileY = 0; tileY < gridSide; tileY++)
       for (int x = 0; x < tileSize; x++)
         for (int y = 0; y < tileSize; y++)
-          output[x + tileX * tileSize][y + tileY * tileSize] =
-              tilesData[compositionOrder[tileX * gridSide + tileY] * t +
-                        x * tileSize + y];
+          output[x + tileX * tileSize][y + tileY * tileSize] = tilesData[compositionOrder[tileX * gridSide + tileY] * t + x * tileSize + y];
+
   return output;
 }
 

@@ -11,6 +11,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <math.h>
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
@@ -33,15 +34,13 @@ const  int REQUESTED_SIZE = 128;
 
 
 void OpenSecondaryWindow(std::string inputFile, std::vector<unsigned char> &datasetData){
-  bool isVideo = false;
-
   int imgNbr = datasetData.size()/(REQUESTED_SIZE*REQUESTED_SIZE);
 
   std::vector<unsigned char> datasetMeans =
       ImageProcessor::getGlobalMeans(datasetData, REQUESTED_SIZE, REQUESTED_SIZE);
-  std::vector<unsigned char> datasetLocalMeans = ImageProcessor::getLocalMeans(
-      datasetData, REQUESTED_SIZE, REQUESTED_SIZE, SMALL_TILE_SIZE);
+  std::vector<unsigned char> datasetLocalMeans = ImageProcessor::getLocalMeans(datasetData, REQUESTED_SIZE, REQUESTED_SIZE, SMALL_TILE_SIZE);
 
+  std::cout << "datasetLocalMeans " << (int)(datasetLocalMeans[0]) << std::endl;
 
 
   std::string inputPath = inputFile.c_str();
@@ -50,12 +49,11 @@ void OpenSecondaryWindow(std::string inputFile, std::vector<unsigned char> &data
   // ===== FILE IS A VIDEO =====
   // ===========================
   if (ext == "mp4" || ext == "avi" || ext == "mov") {
-    isVideo = true;
-    //opening the video
+    // Video processing
     std::string ffmpegReadCmd = "ffmpeg -i " + inputPath +
                                 " -f rawvideo -pix_fmt gray -s " +
-                                std::to_string(WIDTH_OUTPUT) + "x" +
-                                std::to_string(HEIGHT_OUTPUT) + " -r " +
+                                std::to_string(WIDTH_INPUT) + "x" +
+                                std::to_string(HEIGHT_INPUT) + " -r " +
                                 std::to_string(FPS) + " -";
 
     FILE *ffmpegRead = popen(ffmpegReadCmd.c_str(), "r");
@@ -64,52 +62,105 @@ void OpenSecondaryWindow(std::string inputFile, std::vector<unsigned char> &data
       return;
     }
 
-    std::string ffmpegWriteCmd = "ffmpeg -y -f rawvideo -pix_fmt gray -s " +
-                                 std::to_string(WIDTH_OUTPUT) + "x" +
-                                 std::to_string(HEIGHT_OUTPUT) + " -r " +
-                                 std::to_string(FPS) +
-                                 " -i - -c:v libx264 -crf 28 Results/output.mp4";
-
-    FILE *ffmpegWrite = popen(ffmpegWriteCmd.c_str(), "w");
-    if (!ffmpegWrite) {
-      std::cerr << "Failed to open ffmpeg output\n";
-      pclose(ffmpegRead);
-      return;
-    }
-
-    //processing the video
-    size_t frameSize = WIDTH_OUTPUT * HEIGHT_OUTPUT;
     size_t frameInputSize = WIDTH_INPUT * HEIGHT_INPUT;
-    ImageBase mosaic(WIDTH_OUTPUT, HEIGHT_OUTPUT, false);
+    std::vector<std::vector<unsigned char>> allFrames;
     std::vector<unsigned char> buffer(frameInputSize);
-    std::vector<int> prevComposition(SIDE_OF_IMAGE * SIDE_OF_IMAGE, -1);
-    std::vector<bool> used(datasetMeans.size(), false);
-    size_t frameIndex = 0;
-    while (fread(buffer.data(), 1, frameInputSize, ffmpegRead) ==
-           frameInputSize) {
-      // Process frame
-      ImageBase mosaicCPU = VideoProcessor::processFrameUnique(
-          buffer.data(), WIDTH_INPUT, HEIGHT_INPUT,
-          datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE, used);
-
-      //VideoProcessor::processFrameGPU(buffer.data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, mosaic, SIDE_OF_IMAGE);
-
-      // Write to output
-      size_t written = fwrite(mosaicCPU.getData(), 1, frameSize, ffmpegWrite);
-      if (written != frameSize) {
-        std::cerr << "\nWarning: incomplete write on frame " << frameIndex
-                  << std::endl;
+    size_t totalFrames = 0;
+    size_t bytesRead = fread(buffer.data(), 1, frameInputSize, ffmpegRead);
+    do {
+      if (bytesRead != frameInputSize) {
+            std::cerr << "Warning: expected " << frameInputSize << " bytes, but read " << bytesRead << " bytes for frame " << totalFrames << ".\n";
+            break;
       }
-
-      std::cout << "\rProcessing frame " << frameIndex++ << std::flush;
-    }
+      allFrames.push_back(std::vector<unsigned char>(buffer));
+      totalFrames++;
+      bytesRead = fread(buffer.data(), 1, frameInputSize, ffmpegRead);
+    } while(bytesRead > 0);
 
     pclose(ffmpegRead);
-    pclose(ffmpegWrite);
 
-    std::cout << "\nDone. Video written to Results/output.mp4\n";
+    std::cout << "video fully read" << std::endl;
 
-  } 
+
+
+    std::vector<sf::Uint8> pixels(WIDTH_OUTPUT * HEIGHT_OUTPUT * 4);
+
+
+
+    size_t frameSize = WIDTH_OUTPUT * HEIGHT_OUTPUT;
+    std::vector<ImageBase*> mosaic = std::vector<ImageBase*>();
+    mosaic.resize(totalFrames);
+    std::vector<int> prevComposition(SIDE_OF_IMAGE * SIDE_OF_IMAGE, -1);
+    std::vector<bool> used(datasetMeans.size(), false);
+
+    sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "PhotoMosaique "+ (std::string)inputFile);
+    sf::Texture texture;
+    texture.create(WIDTH_OUTPUT, HEIGHT_OUTPUT);
+    sf::Sprite sprite(texture);
+    sprite.setScale(WINDOW_WIDTH/(float)(WIDTH_OUTPUT), WINDOW_HEIGHT/(float)(HEIGHT_OUTPUT));
+
+    int i = 0;
+    bool wentThroughLoop = false;
+    window.setFramerateLimit(FPS);
+    while (window.isOpen()) {
+          sf::Event event;
+          while ( window.pollEvent(event)){
+            if (event.type == sf::Event::Closed) window.close();
+            if (event.type == sf::Event::TextEntered) {
+                if (event.text.unicode == 27) window.close();
+            }
+          }
+
+          if(!wentThroughLoop) mosaic[i] =  new ImageBase(VideoProcessor::processFrameUnique(allFrames[i].data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE, used));
+          //if(!wentThroughLoop) mosaic[i] =  new ImageBase(VideoProcessor::processFrameGPU(buffer.data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, mosaic[i], SIDE_OF_IMAGE));
+          //if(!wentThroughLoop) mosaic[i] =  new ImageBase(VideoProcessor::processFrame(buffer.data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE));
+
+          for (int y = 0; y < HEIGHT_OUTPUT; y++) {
+            for (int x = 0; x < WIDTH_OUTPUT; x++) {
+                int j = (x + y * WIDTH_OUTPUT)*4;
+                int val = (*mosaic[i])[y][x];
+                pixels[j + 0] = val;
+                pixels[j + 1] = val;
+                pixels[j + 2] = val;
+                pixels[j + 3] = 255;
+            }
+          }
+          texture.update(pixels.data());
+          window.clear();
+          window.draw(sprite);
+          window.display();
+          i = (i+1)%totalFrames;
+          if(i == 0) wentThroughLoop = true;
+    }
+    
+    
+
+
+    if(wentThroughLoop){
+      //outputting the video
+      std::string ffmpegWriteCmd = "ffmpeg -y -f rawvideo -pix_fmt gray -s " +
+                                  std::to_string(WIDTH_OUTPUT) + "x" +
+                                  std::to_string(HEIGHT_OUTPUT) + " -r " +
+                                  std::to_string(FPS) +
+                                  " -i - -c:v libx264 -crf 28 Results/output.mp4";
+
+      FILE *ffmpegWrite = popen(ffmpegWriteCmd.c_str(), "w");
+      if (!ffmpegWrite) {
+        std::cerr << "Failed to open ffmpeg output\n";
+        pclose(ffmpegRead);
+        return;
+      }
+      
+      for(int i = 0; i < totalFrames; i ++){
+        size_t written = fwrite(mosaic[i]->getData(), 1, frameSize, ffmpegWrite);
+        if (written != frameSize) {
+          std::cerr << "\nWarning: incomplete write on frame " << i << std::endl;
+        }
+      }
+      pclose(ffmpegWrite);
+      std::cout << "file written" << std::endl;
+    }
+  }
   // =============================
   // ===== FILE IS A pciture =====
   // =============================
@@ -161,12 +212,12 @@ void OpenSecondaryWindow(std::string inputFile, std::vector<unsigned char> &data
 
     while (window.isOpen()) {
           sf::Event event;
-          while (
-              window.pollEvent(event))
-              if (event.type == sf::Event::Closed) window.close();
-              if (event.type == sf::Event::TextEntered) {
-                  if (event.text.unicode == 27) window.close();
-              }
+          while ( window.pollEvent(event)){
+            if (event.type == sf::Event::Closed) window.close();
+            if (event.type == sf::Event::TextEntered) {
+                if (event.text.unicode == 27) window.close();
+            }
+          }
           window.clear();
           window.draw(sprite);
           window.display();
@@ -213,73 +264,9 @@ int main(int argc, char **argv) {
 
   std::string inputPath = argv[1];
   std::string ext = inputPath.substr(inputPath.find_last_of(".") + 1);
-  // ===========================
-  // ===== FILE IS A VIDEO =====
-  // ===========================
-  if (ext == "mp4" || ext == "avi" || ext == "mov") {
-    isVideo = true;
-    //opening the video
-    std::string ffmpegReadCmd = "ffmpeg -i " + inputPath +
-                                " -f rawvideo -pix_fmt gray -s " +
-                                std::to_string(WIDTH_OUTPUT) + "x" +
-                                std::to_string(HEIGHT_OUTPUT) + " -r " +
-                                std::to_string(FPS) + " -";
-
-    FILE *ffmpegRead = popen(ffmpegReadCmd.c_str(), "r");
-    if (!ffmpegRead) {
-      std::cerr << "Failed to open ffmpeg input\n";
-      return 0;
-    }
-
-    std::string ffmpegWriteCmd = "ffmpeg -y -f rawvideo -pix_fmt gray -s " +
-                                 std::to_string(WIDTH_OUTPUT) + "x" +
-                                 std::to_string(HEIGHT_OUTPUT) + " -r " +
-                                 std::to_string(FPS) +
-                                 " -i - -c:v libx264 -crf 28 Results/output.mp4";
-
-    FILE *ffmpegWrite = popen(ffmpegWriteCmd.c_str(), "w");
-    if (!ffmpegWrite) {
-      std::cerr << "Failed to open ffmpeg output\n";
-      pclose(ffmpegRead);
-      return 0;
-    }
-
-    //processing the video
-    size_t frameSize = WIDTH_OUTPUT * HEIGHT_OUTPUT;
-    size_t frameInputSize = WIDTH_INPUT * HEIGHT_INPUT;
-    ImageBase mosaic(WIDTH_OUTPUT, HEIGHT_OUTPUT, false);
-    std::vector<unsigned char> buffer(frameInputSize);
-    std::vector<int> prevComposition(SIDE_OF_IMAGE * SIDE_OF_IMAGE, -1);
-    std::vector<bool> used(datasetMeans.size(), false);
-    size_t frameIndex = 0;
-    while (fread(buffer.data(), 1, frameInputSize, ffmpegRead) ==
-           frameInputSize) {
-      // Process frame
-      ImageBase mosaicCPU = VideoProcessor::processFrameUnique(
-          buffer.data(), WIDTH_INPUT, HEIGHT_INPUT,
-          datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE, used);
-
-      //VideoProcessor::processFrameGPU(buffer.data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, mosaic, SIDE_OF_IMAGE);
-
-      // Write to output
-      size_t written = fwrite(mosaicCPU.getData(), 1, frameSize, ffmpegWrite);
-      if (written != frameSize) {
-        std::cerr << "\nWarning: incomplete write on frame " << frameIndex
-                  << std::endl;
-      }
-
-      std::cout << "\rProcessing frame " << frameIndex++ << std::flush;
-    }
-
-    pclose(ffmpegRead);
-    pclose(ffmpegWrite);
-
-    std::cout << "\nDone. Video written to Results/output.mp4\n";
-
-  } 
 
 
-  // === Window ===
+
   sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "PhotoMosaique");
 
   sf::Font font;
