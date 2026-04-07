@@ -15,8 +15,8 @@
 // Video processing constants
 const int VIDEO_WIDTH_INPUT = 512;
 const int VIDEO_HEIGHT_INPUT = 512;
-const int SIDE_OF_IMAGE = 64;
-const int SMALL_TILE_SIZE = 32;
+const int SIDE_OF_IMAGE = 128;
+const int SMALL_TILE_SIZE = 16;
 const int VIDEO_WIDTH_OUTPUT = SIDE_OF_IMAGE * SMALL_TILE_SIZE;
 const int VIDEO_HEIGHT_OUTPUT = SIDE_OF_IMAGE * SMALL_TILE_SIZE;
 const int FPS = 30;
