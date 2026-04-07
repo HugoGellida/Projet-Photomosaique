@@ -10,7 +10,6 @@ DatasetManager::DatasetManager(int exceptedWidth, int exceptedHeight)
 void DatasetManager::loadFromFolder(const std::string &folderPath) {
   images.clear();
   int x = 0;
-  int max = images.size();
   for (const auto &entry : fs::directory_iterator(folderPath)) {
     if (entry.is_regular_file() && entry.path().extension() == ".pgm") {
       ImageBase *img = new ImageBase();
@@ -21,7 +20,7 @@ void DatasetManager::loadFromFolder(const std::string &folderPath) {
         delete img;
       }
       x++;
-      std::cout << "Loaded images: " << x << "/" << max << std::flush;
+      std::cout << "Loaded images: " << x << "\r" << std::flush;
     }
   }
 }

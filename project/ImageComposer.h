@@ -12,4 +12,11 @@ public:
   static void composeV2(const std::vector<unsigned char> &tilesData,
                         int numTiles, const std::vector<int> &compositionOrder,
                         ImageBase &output);
+
+
+  static ImageBase composeV3(const std::vector<unsigned char> &tilesData,
+                                 int numTiles,
+                                 const std::vector<int> &compositionOrder,
+                                 int smallTileSize,
+                                 int datasetTileSize);
 };

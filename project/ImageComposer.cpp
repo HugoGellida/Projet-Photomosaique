@@ -36,3 +36,39 @@ void ImageComposer::composeV2(const std::vector<unsigned char> &tilesData,
               tilesData[compositionOrder[tileX * gridSide + tileY] * t +
                         x * tileSize + y];
 }
+
+ImageBase ImageComposer::composeV3(const std::vector<unsigned char> &tilesData,
+                                 int numTiles,
+                                 const std::vector<int> &compositionOrder,
+                                 int smallTileSize,
+                                 int datasetTileSize)
+{
+    int gridSide = sqrt(compositionOrder.size());
+    int mosaicWidth = gridSide * smallTileSize;
+    int mosaicHeight = gridSide * smallTileSize;
+
+    ImageBase output(mosaicWidth, mosaicHeight, false);
+
+    for (int tileY = 0; tileY < gridSide; ++tileY) {
+        for (int tileX = 0; tileX < gridSide; ++tileX) {
+            int tileIndex = compositionOrder[tileY * gridSide + tileX];
+
+            for (int y = 0; y < smallTileSize; ++y) {
+                for (int x = 0; x < smallTileSize; ++x) {
+                    // Mapping proportionnel dataset -> imagette finale
+                    int srcX = int(x * float(datasetTileSize) / smallTileSize);
+                    int srcY = int(y * float(datasetTileSize) / smallTileSize);
+
+                    int mosaicIndex = (tileY * smallTileSize + y) * mosaicWidth +
+                                      (tileX * smallTileSize + x);
+                    int tileDataIndex = tileIndex * (datasetTileSize * datasetTileSize) +
+                                        srcY * datasetTileSize + srcX;
+
+                    output.getData()[mosaicIndex] = tilesData[tileDataIndex];
+                }
+            }
+        }
+    }
+
+    return output;
+}

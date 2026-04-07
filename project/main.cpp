@@ -15,8 +15,8 @@
 // Video processing constants
 const int VIDEO_WIDTH_INPUT = 512;
 const int VIDEO_HEIGHT_INPUT = 512;
-const int SIDE_OF_IMAGE = 128;
-const int SMALL_TILE_SIZE = 16;
+const int SIDE_OF_IMAGE = 64;
+const int SMALL_TILE_SIZE = 32;
 const int VIDEO_WIDTH_OUTPUT = SIDE_OF_IMAGE * SMALL_TILE_SIZE;
 const int VIDEO_HEIGHT_OUTPUT = SIDE_OF_IMAGE * SMALL_TILE_SIZE;
 const int FPS = 30;
@@ -110,30 +110,17 @@ int main(int argc, char **argv) {
     ImageBase targetImage;
     targetImage.load(argv[1]);
 
-    // Resize target image to match dataset size if needed
     std::vector<unsigned char> targetData(targetImage.getData(),
                                           targetImage.getData() +
                                               targetImage.getWidth() *
                                                   targetImage.getHeight());
 
-    // If target image has different size, resize it
-    if (targetImage.getWidth() != requestedSize ||
-        targetImage.getHeight() != requestedSize) {
-      ImageBase resizedTarget =
-          Utils::resizeImage(targetData, imagesPerSide, imagettesSize);
-      targetData = std::vector<unsigned char>(
-          resizedTarget.getData(),
-          resizedTarget.getData() +
-              resizedTarget.getWidth() * resizedTarget.getHeight());
-    }
-
-    // Compute EQM for each zone and find best matching dataset image
     auto compositionOrder = ImageProcessor::computeEQMPerZone(
-        targetData, datasetData, requestedSize, requestedSize, imagesPerSide);
+        targetData, datasetData, targetImage.getWidth(), targetImage.getHeight(), requestedSize, requestedSize, imagesPerSide, imagettesSize);
 
     // Compose the final mosaic
-    ImageBase result = ImageComposer::compose(
-        datasetData, dataset.getImages().size(), compositionOrder);
+    ImageBase result = ImageComposer::composeV3(
+        datasetData, dataset.getImages().size(), compositionOrder, imagettesSize, imagesPerSide);
 
     result.save("./Results/out.pgm");
 

@@ -298,81 +298,64 @@ float ImageProcessor::computeEQM(const std::vector<unsigned char> &image1,
   return static_cast<float>(eqm);
 }
 
-std::vector<float>
-ImageProcessor::computeEQMList(const std::vector<unsigned char> &target,
-                               const std::vector<unsigned char> &datasetData,
-                               int width, int height) {
-  int numImages = datasetData.size() / (width * height);
-  std::vector<float> eqmList;
-  int imageSize = width * height;
-  for (int i = 0; i < numImages; ++i) {
-    std::vector<unsigned char> datasetImage(datasetData.begin() + i * imageSize,
-                                            datasetData.begin() +
-                                                (i + 1) * imageSize);
-    float eqm = computeEQM(target, datasetImage);
-    eqmList.push_back(eqm);
-  }
-  return eqmList;
-}
+std::vector<int> ImageProcessor::computeEQMPerZone(
+    const std::vector<unsigned char> &targetImage,
+    const std::vector<unsigned char> &datasetData,
+    int targetWidth, int targetHeight,
+    int datasetWidth, int datasetHeight,
+    int imagesPerSide, int imagettesSize)
+{
+    int numZones = imagesPerSide * imagesPerSide;
+    int numDatasetImages = datasetData.size() / (datasetWidth * datasetHeight);
+    int zoneWidth = targetWidth / imagesPerSide;
+    int zoneHeight = targetHeight / imagesPerSide;
 
-// Compute EQM for each zone against each dataset image
-std::vector<int>
-ImageProcessor::computeEQMPerZone(const std::vector<unsigned char> &targetImage,
-                                  const std::vector<unsigned char> &datasetData,
-                                  int imageWidth, int imageHeight,
-                                  int numZonesPerSide) {
-  int zoneWidth = imageWidth / numZonesPerSide;
-  int zoneHeight = imageHeight / numZonesPerSide;
-  int numZones = numZonesPerSide * numZonesPerSide;
-  int numDatasetImages = datasetData.size() / (imageWidth * imageHeight);
-  int imageSize = imageWidth * imageHeight;
+    std::vector<int> bestMatches(numZones);
 
-  std::vector<int> bestMatches(numZones);
+    // Parcourir chaque zone de l'image cible
+    for (int zoneY = 0; zoneY < imagesPerSide; ++zoneY) {
+        for (int zoneX = 0; zoneX < imagesPerSide; ++zoneX) {
+            int zoneIndex = zoneY * imagesPerSide + zoneX;
 
-  // For each zone
-  for (int zoneY = 0; zoneY < numZonesPerSide; ++zoneY) {
-    for (int zoneX = 0; zoneX < numZonesPerSide; ++zoneX) {
-      int zoneIndex = zoneY * numZonesPerSide + zoneX;
+            // Extraire la zone de l'image cible
+            std::vector<unsigned char> zone(zoneWidth * zoneHeight);
+            for (int y = 0; y < zoneHeight; ++y) {
+                for (int x = 0; x < zoneWidth; ++x) {
+                    int targetPixelX = zoneX * zoneWidth + x;
+                    int targetPixelY = zoneY * zoneHeight + y;
+                    zone[y * zoneWidth + x] =
+                        targetImage[targetPixelY * targetWidth + targetPixelX];
+                }
+            }
 
-      // Extract zone from target image
-      std::vector<unsigned char> zone(zoneWidth * zoneHeight);
-      for (int y = 0; y < zoneHeight; ++y) {
-        for (int x = 0; x < zoneWidth; ++x) {
-          int targetPixelX = zoneX * zoneWidth + x;
-          int targetPixelY = zoneY * zoneHeight + y;
-          zone[y * zoneWidth + x] =
-              targetImage[targetPixelY * imageWidth + targetPixelX];
+            // Chercher la meilleure correspondance dans le dataset
+            int bestIndex = 0;
+            float minEQM = std::numeric_limits<float>::max();
+
+            for (int imgIdx = 0; imgIdx < numDatasetImages; ++imgIdx) {
+                // Échantillonnage proportionnel du dataset pour correspondre à la zone
+                std::vector<unsigned char> datasetZone(zoneWidth * zoneHeight);
+                for (int y = 0; y < zoneHeight; ++y) {
+                    for (int x = 0; x < zoneWidth; ++x) {
+                        int datasetPixelX = x * datasetWidth / zoneWidth;
+                        int datasetPixelY = y * datasetHeight / zoneHeight;
+                        datasetZone[y * zoneWidth + x] =
+                            datasetData[imgIdx * (datasetWidth * datasetHeight) +
+                                        datasetPixelY * datasetWidth +
+                                        datasetPixelX];
+                    }
+                }
+
+                float eqm = computeEQM(zone, datasetZone);
+                if (eqm < minEQM) {
+                    minEQM = eqm;
+                    bestIndex = imgIdx;
+                }
+            }
+
+            bestMatches[zoneIndex] = bestIndex;
         }
-      }
-
-      // Find best matching dataset image for this zone
-      int bestIndex = 0;
-      float minEQM = std::numeric_limits<float>::max();
-
-      for (int imgIdx = 0; imgIdx < numDatasetImages; ++imgIdx) {
-        // Extract same zone from dataset image
-        std::vector<unsigned char> datasetZone(zoneWidth * zoneHeight);
-        for (int y = 0; y < zoneHeight; ++y) {
-          for (int x = 0; x < zoneWidth; ++x) {
-            int datasetPixelX = zoneX * zoneWidth + x;
-            int datasetPixelY = zoneY * zoneHeight + y;
-            datasetZone[y * zoneWidth + x] =
-                datasetData[imgIdx * imageSize + datasetPixelY * imageWidth +
-                            datasetPixelX];
-          }
-        }
-
-        // Compute EQM between zones
-        float eqm = computeEQM(zone, datasetZone);
-        if (eqm < minEQM) {
-          minEQM = eqm;
-          bestIndex = imgIdx;
-        }
-      }
-
-      bestMatches[zoneIndex] = bestIndex;
     }
-  }
 
-  return bestMatches;
+    return bestMatches;
 }

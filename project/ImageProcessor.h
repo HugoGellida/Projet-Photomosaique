@@ -13,17 +13,12 @@ public:
   static float computeEQM(const std::vector<unsigned char> &image1,
                           const std::vector<unsigned char> &image2);
 
-  static std::vector<float>
-  computeEQMList(const std::vector<unsigned char> &target,
-                 const std::vector<unsigned char> &datasetData, int width,
-                 int height);
-
   // Compute EQM for each zone against each dataset image
   // Returns: vector of best matching dataset image index for each zone
   static std::vector<int>
   computeEQMPerZone(const std::vector<unsigned char> &targetImage,
                     const std::vector<unsigned char> &datasetData,
-                    int imageWidth, int imageHeight, int numZonesPerSide);
+                    int imageWidth, int imageHeight, int datasetWidth, int datasetHeight, int numZonesPerSide, int sizeofimages);
 
   // GPU-accelerated smart frame processing kernel wrapper
   static void processFrameSmartGPU(const unsigned char *currentMeans,
