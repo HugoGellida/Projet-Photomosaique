@@ -1,5 +1,5 @@
 # Compilateur CUDA
-NVCC = nvcc
+NVCC = nvcc -ccbin /usr/bin/gcc-10
 
 # Nom de l'exécutable
 TARGET = main
