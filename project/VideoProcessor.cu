@@ -91,7 +91,8 @@ std::vector<int> VideoProcessor::processFrameSmartUnique(
     const std::vector<unsigned char> &currentMeans,
     const std::vector<unsigned char> &datasetMeans,
     std::vector<int> &prevComposition, float threshold, std::vector<bool> &used) {
-
+  
+  
   std::vector<int> composition(currentMeans.size());
 
   // For first frame, use standard ordering
@@ -148,6 +149,30 @@ std::vector<int> VideoProcessor::processFrameSmartUnique(
     used[prevComposition[i]] = false;
     used[bestIndex] = true;
     composition[i] = bestIndex;
+  }
+  for (int z = 0; z < 3; z++){
+    for (int i = 0; i < currentMeans.size(); i++) {
+      if (abs(currentMeans[i] - datasetMeans[prevComposition[i]]) < threshold)
+        continue;
+      for (int j = i + 1; j < currentMeans.size(); j++) {
+        int imgA = composition[i];
+        int imgB = composition[j];
+
+        int oldCost = (currentMeans[i] - datasetMeans[imgA]) *
+                          (currentMeans[i] - datasetMeans[imgA]) +
+                      (currentMeans[j] - datasetMeans[imgB]) *
+                          (currentMeans[j] - datasetMeans[imgB]);
+
+        int newCost = (currentMeans[i] - datasetMeans[imgB]) *
+                          (currentMeans[i] - datasetMeans[imgB]) +
+                      (currentMeans[j] - datasetMeans[imgA]) *
+                          (currentMeans[j] - datasetMeans[imgA]);
+
+        if (newCost + 500 < oldCost) {
+          std::swap(composition[i], composition[j]);
+        }
+      }
+    }
   }
 
   prevComposition = composition;
