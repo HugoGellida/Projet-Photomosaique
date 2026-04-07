@@ -137,6 +137,8 @@ ImageProcessor::getLocalMeans(const std::vector<unsigned char> &imageData,
   unsigned char *d_areaMeans;
   cudaMalloc((void **)&d_areaMeans,
              numImages * numAreas * sizeof(unsigned char));
+
+  cudaMemset(d_areaSums, 0, numImages * numAreas * sizeof(unsigned int));
   cudaMemcpy(d_input, imageData.data(),
              numImages * imageSize * sizeof(unsigned char),
              cudaMemcpyHostToDevice);

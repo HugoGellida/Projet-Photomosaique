@@ -87,6 +87,94 @@ ImageBase VideoProcessor::processFrame(
   return result;
 }
 
+std::vector<int> VideoProcessor::processFrameSmartUnique(
+    const std::vector<unsigned char> &currentMeans,
+    const std::vector<unsigned char> &datasetMeans,
+    std::vector<int> &prevComposition, float threshold, std::vector<bool> &used) {
+
+  std::vector<int> composition(currentMeans.size());
+
+  // For first frame, use standard ordering
+  if (prevComposition.empty() || prevComposition[0] == -1) {
+    composition.resize(currentMeans.size());
+    for (int i = 0; i < currentMeans.size(); i++) {
+      int bestIndex = 0;
+      int bestDist = INT_MAX;
+      for (int j = 0; j < datasetMeans.size(); j++) {
+        if(used[j] == false){
+          int dist = (currentMeans[i] - datasetMeans[j]) *
+                    (currentMeans[i] - datasetMeans[j]);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestIndex = j;
+          }
+        }
+      }
+      used[bestIndex] = true;
+      composition[i] = bestIndex;
+    }
+    prevComposition = composition;
+    return composition;
+  }
+
+  // For subsequent frames, reuse compositions within threshold
+  for (int i = 0; i < currentMeans.size(); i++) {
+    float diff = std::abs((float)currentMeans[i] -
+                          (float)datasetMeans[prevComposition[i]]);
+
+    if (diff < threshold) {
+      // Keep previous composition for this tile
+      composition[i] = prevComposition[i];
+      continue;
+    }
+
+    // Find best matching image
+    int bestIndex = 0;
+    int bestDist = INT_MAX;
+
+    for (int j = 0; j < datasetMeans.size(); j++) {
+      if (used[j] == false){
+        int dist = (currentMeans[i] - datasetMeans[j]) *
+                  (currentMeans[i] - datasetMeans[j]);
+
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIndex = j;
+          if (bestDist == 0)
+            break;
+        }
+      }
+    }
+    used[prevComposition[i]] = false;
+    used[bestIndex] = true;
+    composition[i] = bestIndex;
+  }
+
+  prevComposition = composition;
+  return composition;
+}
+
+ImageBase VideoProcessor::processFrameUnique(
+    const unsigned char *frameData, int width, int height,
+    const std::vector<unsigned char> &datasetLocalMeans,
+    const std::vector<unsigned char> &datasetMeans,
+    std::vector<int> &prevComposition, int sideOfImage, std::vector<bool> &used) {
+
+  // Compute local means for the current frame
+  std::vector<unsigned char> currentMeans = ImageProcessor::getLocalMeans(
+      std::vector<unsigned char>(frameData, frameData + width * height), width,
+      height, sideOfImage);
+
+  // Process frame using smart composition
+  std::vector<int> composition =
+      processFrameSmartUnique(currentMeans, datasetMeans, prevComposition, 15.0f, used);
+
+  // Compose final image
+  ImageBase result = ImageComposer::compose(datasetLocalMeans,
+                                            datasetMeans.size(), composition);
+  return result;
+}
+
 void VideoProcessor::processFrameGPU(
     const unsigned char *frameData, int width, int height,
     const std::vector<unsigned char> &datasetLocalMeans,
@@ -123,7 +211,7 @@ void VideoProcessor::processFrameGPU(
   std::vector<int> composition(numTiles);
   ImageProcessor::processFrameSmartGPU(
       currentMeans.data(), datasetMeans.data(), prevComposition.data(),
-      composition.data(), sideOfImage, numDatasetImages, 15.0f);
+      composition.data(), sideOfImage, numDatasetImages, 15.f);
 
   prevComposition = composition;
 

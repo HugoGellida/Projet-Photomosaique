@@ -15,8 +15,8 @@
 // Video processing constants
 const int VIDEO_WIDTH_INPUT = 512;
 const int VIDEO_HEIGHT_INPUT = 512;
-const int SIDE_OF_IMAGE = 128;
-const int SMALL_TILE_SIZE = 16;
+const int SIDE_OF_IMAGE = 64;
+const int SMALL_TILE_SIZE = 32;
 const int VIDEO_WIDTH_OUTPUT = SIDE_OF_IMAGE * SMALL_TILE_SIZE;
 const int VIDEO_HEIGHT_OUTPUT = SIDE_OF_IMAGE * SMALL_TILE_SIZE;
 const int FPS = 30;
@@ -81,14 +81,16 @@ int main(int argc, char **argv) {
     ImageBase mosaic(VIDEO_WIDTH_OUTPUT, VIDEO_HEIGHT_OUTPUT, false);
     std::vector<unsigned char> buffer(frameInputSize);
     std::vector<int> prevComposition(SIDE_OF_IMAGE * SIDE_OF_IMAGE, -1);
-
+    std::vector<bool> used(datasetMeans.size(), false);
     size_t frameIndex = 0;
     while (fread(buffer.data(), 1, frameInputSize, ffmpegRead) ==
            frameInputSize) {
       // Process frame
-      ImageBase mosaicCPU = VideoProcessor::processFrame(
+      ImageBase mosaicCPU = VideoProcessor::processFrameUnique(
           buffer.data(), VIDEO_WIDTH_INPUT, VIDEO_HEIGHT_INPUT,
-          datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE);
+          datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE, used);
+
+      //VideoProcessor::processFrameGPU(buffer.data(), VIDEO_WIDTH_INPUT, VIDEO_HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, mosaic, SIDE_OF_IMAGE);
 
       // Write to output
       size_t written = fwrite(mosaicCPU.getData(), 1, frameSize, ffmpegWrite);
