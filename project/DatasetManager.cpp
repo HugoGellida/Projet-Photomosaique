@@ -7,6 +7,12 @@ namespace fs = std::filesystem;
 DatasetManager::DatasetManager(int exceptedWidth, int exceptedHeight): width(exceptedWidth), height(exceptedHeight) {}
 
 void DatasetManager::loadFromFolder(const std::string &folderPath){
+    float totalImages = 0.f;
+    for (const auto &entry : fs::directory_iterator(folderPath))
+        if (entry.is_regular_file() && entry.path().extension() == ".pgm")
+        totalImages++;
+
+    float current = 0.f;
     images.clear();
     for (const auto &entry : fs::directory_iterator(folderPath)){
         if (entry.is_regular_file() && entry.path().extension() == ".pgm") {
@@ -18,6 +24,9 @@ void DatasetManager::loadFromFolder(const std::string &folderPath){
                 delete img;
             }
         }
+        current++;
+        float percent = (current * 100) / totalImages;
+        std::cout << "\rLoading images: " << percent << "% (" << current << "/" << totalImages << ")" << std::flush;
     }
     std::cout << "Loaded images: " << images.size() << std::endl;
 }

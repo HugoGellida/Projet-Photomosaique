@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
                                  std::to_string(VIDEO_WIDTH_OUTPUT) + "x" +
                                  std::to_string(VIDEO_HEIGHT_OUTPUT) + " -r " +
                                  std::to_string(FPS) +
-                                 " -i - -c:v libx264 -crf 28 output.mp4";
+                                 " -i - -c:v libx264 -crf 28 Results/output.mp4";
 
     FILE *ffmpegWrite = popen(ffmpegWriteCmd.c_str(), "w");
     if (!ffmpegWrite) {
