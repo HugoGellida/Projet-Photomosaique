@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     pclose(ffmpegRead);
     pclose(ffmpegWrite);
 
-    std::cout << "\nDone. Video written to output.mp4\n";
+    std::cout << "\nDone. Video written to Results/output.mp4\n";
 
   } else {
     // Image processing
