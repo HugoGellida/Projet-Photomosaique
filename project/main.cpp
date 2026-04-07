@@ -106,34 +106,38 @@ int main(int argc, char **argv) {
     std::cout << "\nDone. Video written to output.mp4\n";
 
   } else {
-    // Image processing
+    // Image processing - Mosaic composition
     ImageBase targetImage;
     targetImage.load(argv[1]);
 
-    auto targetLocalMeans = ImageProcessor::getLocalMeans(
-        {targetImage.getData(),
-         targetImage.getData() +
-             targetImage.getWidth() * targetImage.getHeight()},
-        targetImage.getWidth(), targetImage.getHeight(), imagesPerSide);
+    // Resize target image to match dataset size if needed
+    std::vector<unsigned char> targetData(targetImage.getData(),
+                                          targetImage.getData() +
+                                              targetImage.getWidth() *
+                                                  targetImage.getHeight());
 
-    auto compositionOrder =
-        ImageOrdering::orderAllowRepeats(targetLocalMeans, datasetMeans);
+    // If target image has different size, resize it
+    if (targetImage.getWidth() != requestedSize ||
+        targetImage.getHeight() != requestedSize) {
+      ImageBase resizedTarget =
+          Utils::resizeImage(targetData, imagesPerSide, imagettesSize);
+      targetData = std::vector<unsigned char>(
+          resizedTarget.getData(),
+          resizedTarget.getData() +
+              resizedTarget.getWidth() * resizedTarget.getHeight());
+    }
 
+    // Compute EQM for each zone and find best matching dataset image
+    auto compositionOrder = ImageProcessor::computeEQMPerZone(
+        targetData, datasetData, requestedSize, requestedSize, imagesPerSide);
+
+    // Compose the final mosaic
     ImageBase result = ImageComposer::compose(
-        datasetLocalMeans, dataset.getImages().size(), compositionOrder);
-
-    ImageBase resizedOrigin = Utils::resizeImage(
-        {targetImage.getData(),
-         targetImage.getData() +
-             targetImage.getWidth() * targetImage.getHeight()},
-        imagesPerSide, imagettesSize);
-
-    float PSNR = ImageEvaluator::PSNR(resizedOrigin, result);
-    int diff = ImageEvaluator::diffHisto(resizedOrigin, result);
-
-    std::cout << PSNR << " " << diff << std::endl;
+        datasetData, dataset.getImages().size(), compositionOrder);
 
     result.save("./Results/out.pgm");
+
+    std::cout << "Mosaic created successfully!\n";
   }
 
   return 0;

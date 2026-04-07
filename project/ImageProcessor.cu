@@ -1,4 +1,5 @@
 #include "ImageProcessor.h"
+#include <limits>
 #include <vector>
 
 __global__ void sumImages(unsigned char *inputImages, unsigned int *imageSums,
@@ -281,4 +282,97 @@ void ImageProcessor::processFrameSmartGPU(const unsigned char *currentMeans,
   cudaFree(d_datasetMeans);
   cudaFree(d_prevComposition);
   cudaFree(d_composition);
+}
+
+float ImageProcessor::computeEQM(const std::vector<unsigned char> &image1,
+                                 const std::vector<unsigned char> &image2) {
+  if (image1.size() != image2.size())
+    return -1.0f;
+  double eqm = 0.0;
+  for (size_t k = 0; k < image1.size(); ++k) {
+    int val1 = image1[k];
+    int val2 = image2[k];
+    eqm += (val1 - val2) * (val1 - val2);
+  }
+  eqm /= image1.size();
+  return static_cast<float>(eqm);
+}
+
+std::vector<float>
+ImageProcessor::computeEQMList(const std::vector<unsigned char> &target,
+                               const std::vector<unsigned char> &datasetData,
+                               int width, int height) {
+  int numImages = datasetData.size() / (width * height);
+  std::vector<float> eqmList;
+  int imageSize = width * height;
+  for (int i = 0; i < numImages; ++i) {
+    std::vector<unsigned char> datasetImage(datasetData.begin() + i * imageSize,
+                                            datasetData.begin() +
+                                                (i + 1) * imageSize);
+    float eqm = computeEQM(target, datasetImage);
+    eqmList.push_back(eqm);
+  }
+  return eqmList;
+}
+
+// Compute EQM for each zone against each dataset image
+std::vector<int>
+ImageProcessor::computeEQMPerZone(const std::vector<unsigned char> &targetImage,
+                                  const std::vector<unsigned char> &datasetData,
+                                  int imageWidth, int imageHeight,
+                                  int numZonesPerSide) {
+  int zoneWidth = imageWidth / numZonesPerSide;
+  int zoneHeight = imageHeight / numZonesPerSide;
+  int numZones = numZonesPerSide * numZonesPerSide;
+  int numDatasetImages = datasetData.size() / (imageWidth * imageHeight);
+  int imageSize = imageWidth * imageHeight;
+
+  std::vector<int> bestMatches(numZones);
+
+  // For each zone
+  for (int zoneY = 0; zoneY < numZonesPerSide; ++zoneY) {
+    for (int zoneX = 0; zoneX < numZonesPerSide; ++zoneX) {
+      int zoneIndex = zoneY * numZonesPerSide + zoneX;
+
+      // Extract zone from target image
+      std::vector<unsigned char> zone(zoneWidth * zoneHeight);
+      for (int y = 0; y < zoneHeight; ++y) {
+        for (int x = 0; x < zoneWidth; ++x) {
+          int targetPixelX = zoneX * zoneWidth + x;
+          int targetPixelY = zoneY * zoneHeight + y;
+          zone[y * zoneWidth + x] =
+              targetImage[targetPixelY * imageWidth + targetPixelX];
+        }
+      }
+
+      // Find best matching dataset image for this zone
+      int bestIndex = 0;
+      float minEQM = std::numeric_limits<float>::max();
+
+      for (int imgIdx = 0; imgIdx < numDatasetImages; ++imgIdx) {
+        // Extract same zone from dataset image
+        std::vector<unsigned char> datasetZone(zoneWidth * zoneHeight);
+        for (int y = 0; y < zoneHeight; ++y) {
+          for (int x = 0; x < zoneWidth; ++x) {
+            int datasetPixelX = zoneX * zoneWidth + x;
+            int datasetPixelY = zoneY * zoneHeight + y;
+            datasetZone[y * zoneWidth + x] =
+                datasetData[imgIdx * imageSize + datasetPixelY * imageWidth +
+                            datasetPixelX];
+          }
+        }
+
+        // Compute EQM between zones
+        float eqm = computeEQM(zone, datasetZone);
+        if (eqm < minEQM) {
+          minEQM = eqm;
+          bestIndex = imgIdx;
+        }
+      }
+
+      bestMatches[zoneIndex] = bestIndex;
+    }
+  }
+
+  return bestMatches;
 }
