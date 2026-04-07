@@ -121,7 +121,7 @@ void ImageBase::reset()
 	isValid = false;
 }
 
-void ImageBase::load(const char *filename)
+int ImageBase::load(const char *filename)
 {
 	init();
 
@@ -130,7 +130,7 @@ void ImageBase::load(const char *filename)
 	if(l <= 4) // Le fichier ne peut pas etre que ".pgm" ou ".ppm"
 	{
 		printf("Chargement de l'image impossible : Le nom de fichier n'est pas conforme, il doit comporter l'extension, et celle ci ne peut �tre que '.pgm' ou '.ppm'");
-		exit(0);
+		return 1;
 	}
 
 	int nbPixel = 0;
@@ -158,12 +158,14 @@ void ImageBase::load(const char *filename)
 	else 
 	{
 		printf("Chargement de l'image impossible : Le nom de fichier n'est pas conforme, il doit comporter l'extension, et celle ci ne peut �tre que .pgm ou .ppm");
-		exit(0);
+		return 2;
 	}
 	
 	dataD = (double*)malloc(sizeof(double) * nTaille);
 
 	isValid = true;
+
+	return 0;
 }
 
 bool ImageBase::save(const char *filename)
@@ -171,7 +173,7 @@ bool ImageBase::save(const char *filename)
 	if(!isValid)
 	{
 		printf("Sauvegarde de l'image impossible : L'image courante n'est pas valide");
-		exit(0);
+		return false;
 	}
 
 	if(color)
