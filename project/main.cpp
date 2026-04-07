@@ -116,11 +116,14 @@ int main(int argc, char **argv) {
                                                   targetImage.getHeight());
 
     auto compositionOrder = ImageProcessor::computeEQMPerZone(
-        targetData, datasetData, targetImage.getWidth(), targetImage.getHeight(), requestedSize, requestedSize, imagesPerSide, imagettesSize);
+        targetData, datasetData, targetImage.getWidth(),
+        targetImage.getHeight(), requestedSize, requestedSize, imagesPerSide,
+        imagettesSize);
 
     // Compose the final mosaic
     ImageBase result = ImageComposer::composeV3(
-        datasetData, dataset.getImages().size(), compositionOrder, imagettesSize, imagesPerSide);
+        datasetData, dataset.getImages().size(), compositionOrder,
+        imagettesSize, requestedSize);
 
     result.save("./Results/out.pgm");
 
