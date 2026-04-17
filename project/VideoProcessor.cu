@@ -200,12 +200,13 @@ ImageBase VideoProcessor::processFrameUnique(
   return result;
 }
 
-void VideoProcessor::processFrameGPU(
+ImageBase VideoProcessor::processFrameGPU(
     const unsigned char *frameData, int width, int height,
     const std::vector<unsigned char> &datasetLocalMeans,
     const std::vector<unsigned char> &datasetMeans,
-    std::vector<int> &prevComposition, ImageBase &output, int sideOfImage) {
+    std::vector<int> &prevComposition, int sideOfImage, int tileSize) {
 
+  ImageBase output = ImageBase(tileSize, tileSize, false);
   // Compute local means for the current frame
   std::vector<unsigned char> currentMeans = ImageProcessor::getLocalMeans(
       std::vector<unsigned char>(frameData, frameData + width * height), width,
@@ -241,6 +242,6 @@ void VideoProcessor::processFrameGPU(
   prevComposition = composition;
 
   // Compose the final mosaic image
-  ImageComposer::composeV2(datasetLocalMeans, numDatasetImages, composition,
-                           output);
+  ImageComposer::composeV2(datasetLocalMeans, numDatasetImages, composition, output);
+  return output;
 }

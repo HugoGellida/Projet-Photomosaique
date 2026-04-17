@@ -28,9 +28,11 @@ const int SMALL_TILE_SIZE = 32;
 const int WIDTH_OUTPUT = SIDE_OF_IMAGE * SMALL_TILE_SIZE;
 const int HEIGHT_OUTPUT = SIDE_OF_IMAGE * SMALL_TILE_SIZE;
 const int FPS = 30;
-const int WINDOW_WIDTH = 512;
-const int WINDOW_HEIGHT = 512;
-const  int REQUESTED_SIZE = 128;
+const int WINDOW_WIDTH = 800;
+const int WINDOW_HEIGHT = 800;
+const int REQUESTED_SIZE = 128;
+bool unique = false;
+bool priority = false;
 
 
 void OpenSecondaryWindow(std::string inputFile, std::vector<unsigned char> &datasetData){
@@ -110,10 +112,15 @@ void OpenSecondaryWindow(std::string inputFile, std::vector<unsigned char> &data
                 if (event.text.unicode == 27) window.close();
             }
           }
-
-          if(!wentThroughLoop) mosaic[i] =  new ImageBase(VideoProcessor::processFrameUnique(allFrames[i].data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE, used));
-          //if(!wentThroughLoop) mosaic[i] =  new ImageBase(VideoProcessor::processFrameGPU(buffer.data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, mosaic[i], SIDE_OF_IMAGE));
-          //if(!wentThroughLoop) mosaic[i] =  new ImageBase(VideoProcessor::processFrame(buffer.data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE));
+          if(!wentThroughLoop){
+            if(unique){
+              mosaic[i] =  new ImageBase(VideoProcessor::processFrameUnique(allFrames[i].data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE, used));
+            }
+            else{
+              mosaic[i] =  new ImageBase(VideoProcessor::processFrameGPU(allFrames[i].data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE, WIDTH_OUTPUT));
+              //if(!wentThroughLoop) mosaic[i] =  new ImageBase(VideoProcessor::processFrame(allFrames[i].data(), WIDTH_INPUT, HEIGHT_INPUT, datasetLocalMeans, datasetMeans, prevComposition, SIDE_OF_IMAGE));
+            }
+          }
 
           for (int y = 0; y < HEIGHT_OUTPUT; y++) {
             for (int x = 0; x < WIDTH_OUTPUT; x++) {
@@ -175,12 +182,21 @@ void OpenSecondaryWindow(std::string inputFile, std::vector<unsigned char> &data
          targetImage.getData() +
              targetImage.getWidth() * targetImage.getHeight()},
         targetImage.getWidth(), targetImage.getHeight(), SIDE_OF_IMAGE);
+        
+    std::vector<int> compositionOrder;
+    if(unique){
+      if(priority){
+        compositionOrder = ImageOrdering::orderPriority(targetLocalMeans, datasetMeans);
+      }
+      else{
+        compositionOrder = ImageOrdering::orderUnique(targetLocalMeans, datasetMeans);
+      }
+    }
+    else{
+      compositionOrder = ImageOrdering::orderAllowRepeats(targetLocalMeans, datasetMeans);
+    }
 
-    auto compositionOrder =
-        ImageOrdering::orderAllowRepeats(targetLocalMeans, datasetMeans);
-
-    ImageBase result = ImageComposer::compose(
-        datasetLocalMeans, imgNbr, compositionOrder);
+    ImageBase result = ImageComposer::compose(datasetLocalMeans, imgNbr, compositionOrder);
 
     ImageBase resizedOrigin = Utils::resizeImage(
         {targetImage.getData(),
@@ -225,6 +241,7 @@ void OpenSecondaryWindow(std::string inputFile, std::vector<unsigned char> &data
 
     float PSNR = ImageEvaluator::PSNR(resizedOrigin, result);
     int diff = ImageEvaluator::diffHisto(resizedOrigin, result);
+    int ssim = ImageEvaluator::ssim()
 
     std::cout << PSNR << " " << diff << std::endl;
 
@@ -233,16 +250,16 @@ void OpenSecondaryWindow(std::string inputFile, std::vector<unsigned char> &data
 }
 
 int main(int argc, char **argv) {
-  if (argc < 3) {
+  if (argc < 2) {
     std::cout << "Usage: " << argv[0]
-              << " <input.pgm|input.mp4> <dataset_folder>\n";
+              << " <dataset_folder>\n";
     return 1;
   }
 
   // === Loader ===
 
   DatasetManager dataset(REQUESTED_SIZE, REQUESTED_SIZE);
-  dataset.loadFromFolder(argv[2]);
+  dataset.loadFromFolder(argv[1]);
 
   if (dataset.getImages().empty()) {
     std::cerr << "Error: Dataset is empty\n";
@@ -262,11 +279,6 @@ int main(int argc, char **argv) {
 
 
 
-  std::string inputPath = argv[1];
-  std::string ext = inputPath.substr(inputPath.find_last_of(".") + 1);
-
-
-
   sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "PhotoMosaique");
 
   sf::Font font;
@@ -283,6 +295,8 @@ int main(int argc, char **argv) {
   std::string inputText = ""; 
 
   Button validateButton(20.f, 80.f, 200.f, 50.f, "Validate", font);
+  Button uniqueButton(20.f, 150.f, 200.f, 50.f, "Repeat", font);
+  Button priorityButton(20.f, 220.f, 200.f, 50.f, "Without priority", font);
 
   while (window.isOpen()) {
     sf::Event event;
@@ -291,6 +305,27 @@ int main(int argc, char **argv) {
 
         if (validateButton.isClicked(event, window)) {
             OpenSecondaryWindow(inputText, datasetData);
+        }
+        if (uniqueButton.isClicked(event, window)) {
+          if(unique){
+            unique = false;
+            uniqueButton.buttonText.setString("Repeat");
+          }
+          else if(!unique){
+            unique = true;
+            uniqueButton.buttonText.setString("Unique");
+          }
+        }
+
+        if (priorityButton.isClicked(event, window)) {
+          if(priority){
+            priority = false;
+            priorityButton.buttonText.setString("Without priority");
+          }
+          else if(!priority){
+            priority = true;
+            priorityButton.buttonText.setString("With priority");
+          }
         }
 
         if (event.type == sf::Event::TextEntered) {
@@ -317,8 +352,12 @@ int main(int argc, char **argv) {
 
     text.setString(inputText+"|");
     validateButton.updateHover(window);
+    uniqueButton.updateHover(window);
+    priorityButton.updateHover(window);
     window.clear();
     validateButton.draw(window);
+    uniqueButton.draw(window);
+    priorityButton.draw(window);
     window.draw(text);
     window.display();
   }

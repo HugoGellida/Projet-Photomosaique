@@ -55,8 +55,8 @@ public:
     sf::Color restColor = sf::Color(128, 128, 128);
     sf::Color hoverColor = sf::Color(165, 165, 165);
     sf::Color outLine = sf::Color(255, 255, 255);
+    sf::Text buttonText;
 
 private:
     sf::RectangleShape buttonShape;
-    sf::Text buttonText;
 };

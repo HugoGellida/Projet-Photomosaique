@@ -17,12 +17,11 @@ public:
                     std::vector<int> &prevComposition, float threshold, std::vector<bool> &used);
 
   // GPU-accelerated version of processFrameSmart
-  static void
+  static ImageBase
   processFrameGPU(const unsigned char *frameData, int width, int height,
                   const std::vector<unsigned char> &datasetLocalMeans,
                   const std::vector<unsigned char> &datasetMeans,
-                  std::vector<int> &prevComposition, ImageBase &output,
-                  int sideOfImage);
+                  std::vector<int> &prevComposition, int sideOfImage, int tileSize);
 
   // Process frame and return final mosaic
   static ImageBase
